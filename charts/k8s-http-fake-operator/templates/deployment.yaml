@@ -1,0 +1,114 @@
+{{- include "k8s-http-fake-operator.validateClusterIP" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}
+  labels:
+    {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "k8s-http-fake-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "k8s-http-fake-operator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "k8s-http-fake-operator.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ include "k8s-http-fake-operator.defaultImageRepository" . }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ include "k8s-http-fake-operator.defaultHTTPPort" . }}
+              protocol: TCP
+            - name: https
+              containerPort: {{ include "k8s-http-fake-operator.defaultHTTPSPort" . }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ include "k8s-http-fake-operator.defaultHealthPort" . }}
+              protocol: TCP
+          env:
+            - name: HTTP_TEST_STUB_API_GROUP
+              value: {{ include "k8s-http-fake-operator.apiGroup" . }}
+            {{- if .Values.operator.scripts.enabled }}
+            - name: SCRIPT_DIR
+              value: {{ .Values.operator.scripts.directory }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            {{- if and .Values.tls.enabled (not .Values.tls.autoGenerate) }}
+            - name: tls
+              mountPath: /etc/tls
+              readOnly: true
+            {{- end }}
+            {{- if .Values.operator.scripts.enabled }}
+            - name: scripts
+              mountPath: {{ .Values.operator.scripts.directory }}
+              readOnly: {{ .Values.operator.scripts.readOnly }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "k8s-http-fake-operator.fullname" . }}-config
+        {{- if and .Values.tls.enabled (not .Values.tls.autoGenerate) }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.certSecretName }}
+            defaultMode: 420
+        {{- end }}
+        {{- if .Values.operator.scripts.enabled }}
+        - name: scripts
+          {{- if .Values.operator.scripts.hostPath }}
+          hostPath:
+            path: {{ .Values.operator.scripts.hostPath }}
+            type: Directory
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

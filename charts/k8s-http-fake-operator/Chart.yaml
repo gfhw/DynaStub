@@ -1,0 +1,14 @@
+apiVersion: v2
+name: k8s-http-fake-operator
+description: A Helm chart for k8s-http-fake-operator - A Kubernetes operator for HTTP test stubs
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - operator
+  - http
+  - testing
+  - stub
+maintainers:
+  - name: gfhw
+    email: your-email@example.com

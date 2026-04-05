@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-config
+  labels:
+    {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
+data:
+  start.sh: |
+    #!/bin/sh
+    
+    set -e
+    
+    echo "Starting k8s-http-fake-operator..."
+    
+    # Build command line arguments from ConfigMap values
+    
+    ARGS=""
+    
+    # Metrics configuration
+    {{- if .Values.operator.metrics.enabled }}
+    ARGS="$ARGS --metrics-bind-address={{ .Values.operator.metrics.bindAddress }}"
+    {{- end }}
+    
+    {{- if .Values.operator.metrics.secure }}
+    ARGS="$ARGS --metrics-secure=true"
+    {{- else }}
+    ARGS="$ARGS --metrics-secure=false"
+    {{- end }}
+    
+    {{- if .Values.operator.metrics.certPath }}
+    ARGS="$ARGS --metrics-cert-path={{ .Values.operator.metrics.certPath }}"
+    {{- end }}
+    
+    {{- if .Values.operator.metrics.certName }}
+    ARGS="$ARGS --metrics-cert-name={{ .Values.operator.metrics.certName }}"
+    {{- end }}
+    
+    {{- if .Values.operator.metrics.keyName }}
+    ARGS="$ARGS --metrics-cert-key={{ .Values.operator.metrics.keyName }}"
+    {{- end }}
+    
+    # Health probe configuration
+    ARGS="$ARGS --health-probe-bind-address={{ .Values.operator.healthProbe.bindAddress }}"
+    
+    # Leader election configuration
+    {{- if .Values.operator.leaderElection.enabled }}
+    ARGS="$ARGS --leader-elect=true"
+    {{- else }}
+    ARGS="$ARGS --leader-elect=false"
+    {{- end }}
+    
+    # Webhook configuration
+    {{- if .Values.operator.webhook.certPath }}
+    ARGS="$ARGS --webhook-cert-path={{ .Values.operator.webhook.certPath }}"
+    {{- end }}
+    
+    {{- if .Values.operator.webhook.certName }}
+    ARGS="$ARGS --webhook-cert-name={{ .Values.operator.webhook.certName }}"
+    {{- end }}
+    
+    {{- if .Values.operator.webhook.keyName }}
+    ARGS="$ARGS --webhook-cert-key={{ .Values.operator.webhook.keyName }}"
+    {{- end }}
+    
+    # HTTP/2 configuration
+    {{- if .Values.operator.http2.enabled }}
+    ARGS="$ARGS --enable-http2=true"
+    {{- else }}
+    ARGS="$ARGS --enable-http2=false"
+    {{- end }}
+    
+    # Server configuration
+    ARGS="$ARGS --http-port={{ include "k8s-http-fake-operator.defaultOperatorHTTPPort" . }}"
+    ARGS="$ARGS --https-port={{ include "k8s-http-fake-operator.defaultOperatorHTTPSPort" . }}"
+    ARGS="$ARGS --tls-cert-file={{ .Values.operator.server.tlsCertFile }}"
+    ARGS="$ARGS --tls-key-file={{ .Values.operator.server.tlsKeyFile }}"
+    
+    # Scripts configuration
+    {{- if .Values.operator.scripts.enabled }}
+    export SCRIPT_DIR="{{ .Values.operator.scripts.directory }}"
+    echo "Scripts directory: $SCRIPT_DIR"
+    {{- end }}
+    
+    echo "Starting manager with arguments: $ARGS"
+    
+    # Infinite loop to keep the container running and restart the manager if it crashes
+    while true; do
+        echo "Starting manager process..."
+        /manager $ARGS
+        
+        # If manager exits, wait a bit before restarting
+        echo "Manager process exited with code $?"
+        echo "Waiting 5 seconds before restarting..."
+        sleep 5
+        
+        echo "Restarting manager..."
+    done

@@ -1,0 +1,61 @@
+apiVersion: httpteststub.example.com/v1
+kind: HTTPTestStub
+metadata:
+  name: test-stub
+spec:
+  # 基础配置
+  baseInfo:
+    protocol: https
+    port: 8443
+  # 请求匹配规则
+  request:
+    method: POST
+    url:
+      type: "pattern"  # 匹配类型: exact, pattern, regex
+      pattern: "/tsm/tenants/admin/operator/preentitycapability"  # 支持通配符
+  # 响应配置
+  response:
+    type: "static"  # 响应类型: static, script
+    static:
+      status: 200
+      headers:
+        Content-Type: "application/json"
+      body:
+        result: true
+  # TLS配置
+  tls:
+    enabled: true
+    secretName: tls-secret
+  # 多个stub配置
+  stubs:
+  - request:
+      method: POST
+      url:
+        type: "pattern"
+        pattern: "/api/test/*"
+    responseRules:
+    - rule:
+        type: "range"
+        start: 1
+        end: 100
+      response:
+        status: 200
+        headers: {"Content-Type": "application/json"}
+        body: {"result": true, "message": "Response A"}
+    - rule:
+        type: "range"
+        start: 101
+        end: 200
+      response:
+        status: 200
+        headers: {"Content-Type": "application/json"}
+        body: {"result": false, "message": "Response B"}
+    - rule:
+        type: "default"
+      response:
+        status: 500
+        headers: {"Content-Type": "application/json"}
+        body: {"result": false, "message": "Response C"}
+    counter:
+      reset: false
+      resetAfter: 0

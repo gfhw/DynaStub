@@ -1,0 +1,49 @@
+replicaCount: 1
+
+image:
+  repository: k8s-http-fake-operator
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+operator:
+  metrics:
+    enabled: true
+    bindAddress: ":8080"
+    secure: true
+    certPath: ""
+    certName: "tls.crt"
+    keyName: "tls.key"
+  
+  healthProbe:
+    bindAddress: ":8081"
+  
+  leaderElection:
+    enabled: false
+  
+  webhook:
+    certPath: ""
+    certName: "tls.crt"
+    keyName: "tls.key"
+  
+  http2:
+    enabled: false
+  
+  server:
+    httpPort: 8080
+    httpsPort: 8443
+    tlsCertFile: "/etc/tls/tls.crt"
+    tlsKeyFile: "/etc/tls/tls.key"
+
+service:
+  type: ClusterIP
+  httpPort: 8080
+  httpsPort: 8443
+  healthPort: 8081
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

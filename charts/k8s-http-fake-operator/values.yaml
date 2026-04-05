@@ -1,0 +1,117 @@
+replicaCount: 1
+
+# API Group configuration for CRD isolation
+# Allows multiple deployments with different API groups
+apiGroup:
+  # The API group suffix (e.g., "example" becomes "httpteststub.example.com")
+  # If empty, defaults to "example"
+  suffix: ""
+  # Full API group name (overrides suffix if set)
+  # If empty, uses "httpteststub.{{ suffix }}.com" or "httpteststub.example.com" if suffix is empty
+  fullName: ""
+
+image:
+  repository: k8s-http-fake-operator
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  clusterIP: ""  # Optional: Specify a custom cluster IP address (IPv4 or IPv6)
+  httpPort: 8080
+  httpsPort: 8443
+  healthPort: 8081
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# TLS configuration for HTTPS support
+tls:
+  enabled: true
+  # If autoGenerate is true, Helm will generate a self-signed certificate
+  # If false, you must provide your own certificate in the specified secret
+  autoGenerate: true
+  # Name of the Kubernetes Secret containing the TLS certificate
+  # The secret should have tls.crt and tls.key data fields
+  certSecretName: "k8s-http-fake-operator-tls"
+  # Path to certificate files inside the container
+  certPath: "/etc/tls/tls.crt"
+  keyPath: "/etc/tls/tls.key"
+
+operator:
+  metrics:
+    enabled: false
+    bindAddress: ":8080"
+    secure: true
+    certPath: ""
+    certName: "tls.crt"
+    keyName: "tls.key"
+  
+  healthProbe:
+    bindAddress: ":8081"
+  
+  leaderElection:
+    enabled: false
+  
+  webhook:
+    certPath: ""
+    certName: "tls.crt"
+    keyName: "tls.key"
+  
+  http2:
+    enabled: false
+  
+  server:
+    httpPort: 8080
+    httpsPort: 8443
+    tlsCertFile: "/etc/tls/tls.crt"
+    tlsKeyFile: "/etc/tls/tls.key"
+  
+  scripts:
+    enabled: false
+    directory: "/scripts"
+    hostPath: ""  # Host path to mount scripts from
+    readOnly: true

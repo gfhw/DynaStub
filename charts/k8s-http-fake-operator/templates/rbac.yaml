@@ -1,0 +1,64 @@
+{{- $apiGroup := include "k8s-http-fake-operator.apiGroup" . -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-manager-role
+  labels:
+    {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - {{ $apiGroup }}
+  resources:
+  - httpteststubs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - {{ $apiGroup }}
+  resources:
+  - httpteststubs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - {{ $apiGroup }}
+  resources:
+  - httpteststubs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-manager-rolebinding
+  labels:
+    {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-manager-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "k8s-http-fake-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
