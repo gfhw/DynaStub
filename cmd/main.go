@@ -19,7 +19,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	beego "github.com/beego/beego/v2/server/web"
 	webappv1 "httpteststub.example.com/api/v1"
 	"httpteststub.example.com/internal/controller"
 )
@@ -43,10 +42,6 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
-	var httpPort int
-	var httpsPort int
-	var tlsCertFile string
-	var tlsKeyFile string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address probe endpoint binds to.")
@@ -59,10 +54,6 @@ func main() {
 	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "Name of metrics server certificate file.")
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "Name of metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false, "Enable HTTP/2.")
-	flag.IntVar(&httpPort, "http-port", 8080, "HTTP server port.")
-	flag.IntVar(&httpsPort, "https-port", 8443, "HTTPS server port.")
-	flag.StringVar(&tlsCertFile, "tls-cert-file", "/etc/tls/tls.crt", "TLS certificate file.")
-	flag.StringVar(&tlsKeyFile, "tls-key-file", "/etc/tls/tls.key", "TLS key file.")
 
 	opts := zap.Options{
 		Development: true,
@@ -187,40 +178,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupBeego(httpPort, httpsPort, tlsCertFile, tlsKeyFile)
-
 	setupLog.Info("starting manager")
-	go func() {
-		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-			setupLog.Error(err, "problem running manager")
-			os.Exit(1)
-		}
-	}()
-
-	setupLog.Info("starting beego server", "http-port", httpPort, "https-port", httpsPort)
-	beego.Run()
-}
-
-func setupBeego(httpPort, httpsPort int, tlsCertFile, tlsKeyFile string) {
-	beego.BConfig.CopyRequestBody = true
-	beego.BConfig.Listen.HTTPPort = httpPort
-	beego.BConfig.Listen.EnableHTTPS = true
-	beego.BConfig.Listen.HTTPSPort = httpsPort
-	beego.BConfig.Listen.HTTPSCertFile = tlsCertFile
-	beego.BConfig.Listen.HTTPSKeyFile = tlsKeyFile
-	beego.BConfig.Listen.EnableAdmin = false
-	beego.BConfig.RunMode = "prod"
-
-	beego.Router("/*", &controller.StubController{})
-	beego.Router("/healthz", &controller.HealthController{})
-	beego.Router("/readyz", &controller.ReadyController{})
-
-	setupLog.Info("Beego routes configured",
-		"http-port", httpPort,
-		"https-port", httpsPort,
-		"tls-cert", tlsCertFile,
-		"tls-key", tlsKeyFile,
-	)
-
-	setupLog.Info("Beego configuration completed")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
 }
