@@ -447,6 +447,5 @@ DynaStub 通过以下机制实现命令打桩：
 2. **Webhook 注入**：自动拦截 Pod 创建，注入 Sidecar 和 Volume
 3. **文件替换**：通过 emptyDir + subPath 挂载替换目标命令
 4. **热更新**：Sidecar 持续监听脚本变化，实时更新
-5. **可扩展**：支持 Local 和 Remote 两种模式
 
 整个流程无需修改业务镜像，无需重建 Pod，实现真正的动态命令打桩。
