@@ -4,19 +4,17 @@ metadata:
   name: go-app-behavior
   namespace: default
 spec:
-  mode: local
-  localConfig:
-    targetSelector:
-      matchLabels:
-        app: go-app
-    sidecarImage: dynastub-sidecar:latest
-    sidecarResources:
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
-      requests:
-        cpu: "50m"
-        memory: "32Mi"
+  targetSelector:
+    matchLabels:
+      app: go-app
+  sidecarImage: dynastub-sidecar:latest
+  sidecarResources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "32Mi"
   scriptVolume:
     hostPath: /opt/dynastub/scripts
     mountPath: /src/scripts

@@ -78,7 +78,7 @@ func (m *PodMutator) findMatchingBehaviorStub(ctx context.Context, pod *corev1.P
 
 	for i := range behaviorStubList.Items {
 		bs := &behaviorStubList.Items[i]
-		selector, err := metav1.LabelSelectorAsSelector(&bs.Spec.LocalConfig.TargetSelector)
+		selector, err := metav1.LabelSelectorAsSelector(&bs.Spec.TargetSelector)
 		if err != nil {
 			continue
 		}
@@ -113,7 +113,7 @@ func (m *PodMutator) injectSidecar(pod *corev1.Pod, behaviorStub *dynastubv1.Beh
 	pod.Spec.Volumes = append(pod.Spec.Volumes, hostPathVolume)
 
 	// 3. 添加 Sidecar 容器（使用原生 sidecar 模式）
-	sidecarImage := behaviorStub.Spec.LocalConfig.SidecarImage
+	sidecarImage := behaviorStub.Spec.SidecarImage
 	if sidecarImage == "" {
 		sidecarImage = "dynastub-sidecar:latest"
 	}
@@ -149,8 +149,8 @@ func (m *PodMutator) injectSidecar(pod *corev1.Pod, behaviorStub *dynastubv1.Beh
 	}
 
 	// 添加资源限制（如果配置了）
-	if behaviorStub.Spec.LocalConfig.SidecarResources != nil {
-		sidecarContainer.Resources = *behaviorStub.Spec.LocalConfig.SidecarResources
+	if behaviorStub.Spec.SidecarResources != nil {
+		sidecarContainer.Resources = *behaviorStub.Spec.SidecarResources
 	}
 
 	// 使用原生 sidecar 模式（K8s 1.28+）

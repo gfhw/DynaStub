@@ -47,7 +47,7 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// 2. 根据 targetSelector 查找目标 Pod
 	podList := &corev1.PodList{}
-	selector, err := metav1.LabelSelectorAsSelector(&behaviorStub.Spec.LocalConfig.TargetSelector)
+	selector, err := metav1.LabelSelectorAsSelector(&behaviorStub.Spec.TargetSelector)
 	if err != nil {
 		logger.Error(err, "invalid target selector")
 		r.updateStatus(ctx, behaviorStub, "Failed", 0, 0)
@@ -177,7 +177,7 @@ func GetBehaviorStubByPod(ctx context.Context, c client.Client, pod *corev1.Pod)
 
 	for i := range behaviorStubList.Items {
 		bs := &behaviorStubList.Items[i]
-		selector, err := metav1.LabelSelectorAsSelector(&bs.Spec.LocalConfig.TargetSelector)
+		selector, err := metav1.LabelSelectorAsSelector(&bs.Spec.TargetSelector)
 		if err != nil {
 			continue
 		}

@@ -33,58 +33,47 @@ spec:
               description: BehaviorStubSpec 定义行为注入规则
               type: object
               required:
-                - mode
+                - targetSelector
+                - sidecarImage
                 - scriptVolume
                 - behaviors
               properties:
-                mode:
-                  description: 运行模式，支持 local 或 remote
-                  type: string
-                  enum:
-                    - local
-                    - remote
-                localConfig:
-                  description: 本地模式配置
+                targetSelector:
+                  description: 目标 Pod 选择器
                   type: object
-                  required:
-                    - targetSelector
                   properties:
-                    targetSelector:
-                      description: 目标 Pod 选择器
+                    matchLabels:
                       type: object
-                      properties:
-                        matchLabels:
-                          type: object
-                          additionalProperties:
+                      additionalProperties:
+                        type: string
+                    matchExpressions:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          key:
                             type: string
-                        matchExpressions:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              key:
-                                type: string
-                              operator:
-                                type: string
-                              values:
-                                type: array
-                                items:
-                                  type: string
-                    sidecarImage:
-                      description: Sidecar 容器镜像
-                      type: string
-                    sidecarResources:
-                      description: Sidecar 资源限制
+                          operator:
+                            type: string
+                          values:
+                            type: array
+                            items:
+                              type: string
+                sidecarImage:
+                  description: Sidecar 容器镜像
+                  type: string
+                sidecarResources:
+                  description: Sidecar 资源限制
+                  type: object
+                  properties:
+                    limits:
                       type: object
-                      properties:
-                        limits:
-                          type: object
-                          additionalProperties:
-                            type: string
-                        requests:
-                          type: object
-                          additionalProperties:
-                            type: string
+                      additionalProperties:
+                        type: string
+                    requests:
+                      type: object
+                      additionalProperties:
+                        type: string
                 scriptVolume:
                   description: 脚本卷配置
                   type: object

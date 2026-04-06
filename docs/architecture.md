@@ -61,7 +61,7 @@ DynaStub 是一个 Kubernetes Operator，用于在容器内动态替换可执行
 | **BehaviorStub CRD** | 用户声明注入规则：目标 Pod 选择器、要替换的命令、脚本路径等 |
 | **Controller** | 监听 CR 变化，更新注入状态（已注入 Pod 数、总目标 Pod 数等） |
 | **Mutating Webhook** | 拦截 Pod 创建请求，根据匹配的 BehaviorStub 动态注入 Sidecar 和 Volume |
-| **Sidecar** | 运行在目标 Pod 中，负责从 hostPath 读取用户脚本并复制到 emptyDir，支持热更新 |
+| **Sidecar** | 运行在目标 Pod 中，从 K8s API 获取 behaviors 列表，根据列表精确复制每个脚本到 emptyDir，支持热更新 |
 | **emptyDir** | 存放最终生效的脚本文件，供业务容器通过 subPath 挂载 |
 | **hostPath** | 节点上的目录，存放用户编写的原始脚本（只读挂载到 Sidecar） |
 
@@ -97,8 +97,6 @@ case "$1" in
         exit 0
         ;;
     *)
-        # 注意：由于 subPath 挂载会覆盖原命令，无法直接透传
-        # 如需透传，请在镜像构建时将原命令备份为 .original
         echo "Command intercepted by DynaStub: docker $@"
         exit 1
         ;;
@@ -131,16 +129,14 @@ metadata:
   name: docker-stub
   namespace: default
 spec:
-  mode: local
-  localConfig:
-    targetSelector:
-      matchLabels:
-        app: myapp
-    sidecarImage: dynastub-sidecar:latest
-    sidecarResources:
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
+  targetSelector:
+    matchLabels:
+      app: myapp
+  sidecarImage: dynastub-sidecar:latest
+  sidecarResources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
   scriptVolume:
     hostPath: /opt/dynastub/scripts
     mountPath: /src/scripts
@@ -214,15 +210,22 @@ kubectl apply -f pod.yaml
          path: /opt/dynastub/scripts
    ```
 
-4. **修改业务容器挂载**
+4. **修改业务容器挂载**（支持多命令）
    ```yaml
    containers:
      - name: main
        volumeMounts:
+         # 第一个命令：docker
          - name: dynastub-shared
            mountPath: /usr/bin/docker
-           subPath: docker-wrapper.sh
+           subPath: docker
+         # 第二个命令：kubectl
+         - name: dynastub-shared
+           mountPath: /usr/local/bin/kubectl
+           subPath: kubectl
    ```
+   
+   **注意**：每个 behavior 对应一个独立的 subPath 挂载，目标文件名使用 `targetPath` 的最后一部分（如 `/usr/bin/docker` → `docker`）
 
 5. **返回修改后的 Pod 定义**
    - API Server 继续创建 Pod
@@ -266,8 +269,7 @@ kubectl apply -f pod.yaml
 docker-wrapper.sh 执行
     │
     ├── 记录日志
-    ├── 执行自定义逻辑 (返回伪造数据)
-    └── 或透传给 /usr/bin/docker.original
+    └── 执行自定义逻辑 (返回伪造数据)
 ```
 
 ### 3.5 热更新阶段
@@ -319,7 +321,44 @@ docker-stub   Running  3          3       10m
 
 ## 四、关键实现细节
 
-### 4.1 原子复制
+### 4.1 Sidecar 多命令处理流程
+
+Sidecar 容器启动后，按以下流程处理多命令打桩：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Sidecar 启动流程                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. 从 K8s API 获取 BehaviorStub                                │
+│     ├── 读取 spec.behaviors 列表                                │
+│     └── 解析每个 behavior 的 scriptPath 和 targetPath           │
+│                          │                                      │
+│                          ▼                                      │
+│  2. 遍历 behaviors 列表                                         │
+│     ├── 对于每个 behavior:                                      │
+│     │   ├── 源文件: scriptMountPath + scriptPath               │
+│     │   └── 目标文件: sharedDir + basename(targetPath)         │
+│     │       例如: /shared/docker (来自 /usr/bin/docker)        │
+│     │                                                           │
+│     └── 执行原子复制到 emptyDir                                 │
+│                          │                                      │
+│                          ▼                                      │
+│  3. 标记 ready，业务容器启动                                     │
+│                                                                 │
+│  4. 启动热更新监听（每 5 秒同步一次）                            │
+│     └── 重新从 API 获取 behaviors 并同步                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**关键设计**：
+- Sidecar 通过 K8s Dynamic Client 直接从 API Server 获取 BehaviorStub
+- 根据 `behaviors` 列表精确复制，而非复制整个目录
+- 目标文件名使用 `targetPath` 的最后一部分，确保与 `subPath` 挂载匹配
+- 如果 API 获取失败，降级为复制整个源目录（向后兼容）
+
+### 4.2 原子复制
 
 ```go
 func atomicCopy(srcPath, dstPath string) error {
@@ -354,7 +393,7 @@ func atomicCopy(srcPath, dstPath string) error {
 }
 ```
 
-### 4.2 subPath 挂载
+### 4.3 subPath 挂载（支持多命令）
 
 `subPath` 允许将 Volume 中的单个文件挂载到容器的指定路径，而不是挂载整个目录：
 
@@ -362,12 +401,29 @@ func atomicCopy(srcPath, dstPath string) error {
 volumeMounts:
   - name: dynastub-shared
     mountPath: /usr/bin/docker      # 容器内的目标路径
-    subPath: docker-wrapper.sh      # Volume 中的文件名
+    subPath: docker                 # Volume 中的文件名（使用 targetPath 的最后一部分）
 ```
 
-这样 `/usr/bin/docker` 会被替换为 `emptyDir` 中的脚本，而其他命令保持不变。
+**多命令挂载示例**：
+```yaml
+volumeMounts:
+  # docker 命令
+  - name: dynastub-shared
+    mountPath: /usr/bin/docker
+    subPath: docker
+  # kubectl 命令
+  - name: dynastub-shared
+    mountPath: /usr/local/bin/kubectl
+    subPath: kubectl
+  # curl 命令
+  - name: dynastub-shared
+    mountPath: /usr/bin/curl
+    subPath: curl
+```
 
-### 4.3 原生 Sidecar 模式
+每个 behavior 对应一个独立的 subPath 挂载，互不影响。Sidecar 根据 `behaviors` 列表精确复制每个脚本到 `emptyDir`，文件名使用 `targetPath` 的最后一部分。
+
+### 4.4 原生 Sidecar 模式
 
 Kubernetes 1.28+ 支持在 `initContainers` 中设置 `restartPolicy: Always`：
 
@@ -383,98 +439,7 @@ initContainers:
 - Sidecar 保持运行，不阻塞业务容器启动
 - 业务容器启动时，Sidecar 已完成脚本复制
 
-## 五、扩展模式：Remote
-
-当前 CRD 支持 `mode: local`，未来可扩展支持 `mode: remote`：
-
-### 5.1 Remote 模式场景
-
-被测组件需要连接远端 IP 执行系统命令，例如：
-- SSH 到远程服务器执行命令
-- 通过 API 调用远程服务
-
-### 5.2 Remote 模式方案
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Remote 模式架构                               │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────────┐         ┌─────────────────────────────┐   │
-│  │   被测组件       │────────►│  Remote Pod (动态创建)       │   │
-│  │  (目标 Pod)      │  SSH/API│  - Service IP = 目标远程 IP  │   │
-│  └─────────────────┘         │  - 内部执行命令打桩            │   │
-│                              │    (同 Local 模式)            │   │
-│                              └─────────────────────────────┘   │
-│                                         ▲                      │
-│                                         │ 创建和管理            │
-│                              ┌──────────┴──────────┐          │
-│                              │   DynaStub Operator  │          │
-│                              │  (Remote 模式控制器) │          │
-│                              └─────────────────────┘          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 5.3 实现思路
-
-当 `mode: remote` 时：
-
-1. **Controller 创建 Remote Pod**
-   - 根据 `remoteConfig.targetIP` 创建 Pod
-   - 创建 Service，ClusterIP 设置为 `targetIP`
-   - 在 Remote Pod 中执行 Local 模式的相同操作
-
-2. **Remote Pod 内部**
-   - 同样注入 Sidecar
-   - 同样通过 emptyDir + subPath 替换命令
-   - 暴露 SSH/API 端口供被测组件连接
-
-3. **被测组件视角**
-   - 连接到 "远程 IP"
-   - 实际连接到 Remote Pod
-   - 执行的命令已被打桩
-
-### 5.4 可行性评估
-
-| 方面 | 评估 |
-|------|------|
-| **技术可行性** | ✅ 可行。利用 K8s Service 的 ClusterIP 可以绑定指定 IP（需在 Service CIDR 范围内） |
-| **网络连通性** | ✅ 被测组件通过 Service IP 访问 Remote Pod，K8s 自动负载均衡 |
-| **隔离性** | ✅ 每个 Remote 目标独立一个 Pod，互不干扰 |
-| **资源开销** | ⚠️ 每个远程目标需要一个 Pod，资源消耗较大 |
-| **复杂性** | ⚠️ 需要管理 Pod 生命周期，处理连接状态同步 |
-
-### 5.5 建议实现
-
-```yaml
-apiVersion: dynastub.example.com/v1
-kind: BehaviorStub
-metadata:
-  name: remote-ssh-stub
-spec:
-  mode: remote
-  remoteConfig:
-    targetIP: 10.0.1.100      # 被测组件要连接的远程 IP
-    servicePort: 22           # SSH 端口
-    podTemplate:
-      image: remote-stub-pod:latest
-      resources:
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-  scriptVolume:
-    hostPath: /opt/dynastub/remote-scripts
-    mountPath: /src/scripts
-  behaviors:
-    - name: ssh
-      targetPath: /usr/bin/ssh
-      scriptPath: /src/scripts/ssh-wrapper.sh
-```
-
-**结论**：Remote 模式方案可行，建议作为后续迭代功能实现。
-
-## 六、总结
+## 五、总结
 
 DynaStub 通过以下机制实现命令打桩：
 

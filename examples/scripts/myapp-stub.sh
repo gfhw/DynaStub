@@ -18,18 +18,6 @@ echo "[$TIMESTAMP] Environment: $(env)" >> "$LOG_FILE"
 # - 返回模拟数据
 # - 调用其他服务
 
-# 注意：由于 subPath 挂载会覆盖原命令，且容器文件系统通常只读，
-# 无法自动备份原命令。如需透传调用原命令，请在构建镜像时预先将
-# 原命令备份为 .original 版本，例如：
-#   RUN cp /app/myapp /app/myapp.original
-#
-# 然后在脚本中调用：
-# if [ -f "/app/myapp.original" ]; then
-#     echo "[$TIMESTAMP] Calling original binary..." >> "$LOG_FILE"
-#     /app/myapp.original "$@"
-#     exit $?
-# fi
-
 # 默认行为：输出拦截信息
 echo "DynaStub: This call was intercepted by DynaStub"
 echo "Original command: /app/myapp"
