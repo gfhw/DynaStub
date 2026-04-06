@@ -8,7 +8,7 @@ import (
 
 var (
 	SchemeGroupVersion = schema.GroupVersion{
-		Group:   "httpteststub.example.com",
+		Group:   "dynastub.example.com",
 		Version: "v1",
 	}
 
@@ -18,8 +18,8 @@ var (
 
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
-		&HTTPTestStub{},
-		&HTTPTestStubList{},
+		&BehaviorStub{},
+		&BehaviorStubList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

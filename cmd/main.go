@@ -145,11 +145,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.HTTPTestStubReconciler{
+	if err := (&controller.BehaviorStubReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HTTPTestStub")
+		setupLog.Error(err, "unable to create controller", "controller", "BehaviorStub")
 		os.Exit(1)
 	}
 

@@ -1,0 +1,38 @@
+# Build stage
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /workspace
+
+# Copy go mod files
+COPY go.mod go.mod
+COPY go.sum go.sum
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY api/ api/
+COPY internal/sidecar/ internal/sidecar/
+COPY cmd/sidecar/ cmd/sidecar/
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o sidecar ./cmd/sidecar/main.go
+
+# Final stage
+FROM alpine:3.19
+
+WORKDIR /
+
+# Install ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
+# Copy binary
+COPY --from=builder /workspace/sidecar /usr/local/bin/sidecar
+
+# Create shared directory
+RUN mkdir -p /shared
+
+# Run as non-root user
+USER 65532:65532
+
+ENTRYPOINT ["sidecar"]

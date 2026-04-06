@@ -1,420 +1,200 @@
-{{- $apiGroup := include "k8s-http-fake-operator.apiGroup" . -}}
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  name: behaviorstubs.dynastub.example.com
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
-  name: httpteststubs.{{ $apiGroup }}
+    controller-gen.kubebuilder.io/version: v0.14.0
 spec:
-  group: {{ $apiGroup }}
+  group: dynastub.example.com
   names:
-    kind: HTTPTestStub
-    listKind: HTTPTestStubList
-    plural: httpteststubs
-    singular: httpteststub
+    kind: BehaviorStub
+    listKind: BehaviorStubList
+    plural: behaviorstubs
+    singular: behaviorstub
+    shortNames:
+      - bs
   scope: Namespaced
   versions:
-  - name: v1
-    schema:
-      openAPIV3Schema:
-        description: HTTPTestStub is the Schema for the httpteststubs API
-        properties:
-          apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-            type: string
-          kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: HTTPTestStubSpec defines the desired state of HTTPTestStub
-            properties:
-              protocol:
-                type: string
-              request:
-                description: Request 请求匹配规则
-                properties:
-                  method:
-                    type: string
-                  url:
-                    description: URL URL匹配规则
-                    properties:
-                      pattern:
-                        type: string
-                      regex:
-                        type: string
-                      type:
-                        type: string
-                    required:
-                    - type
-                    type: object
-                  body:
-                    description: Body 请求体匹配规则
-                    properties:
-                      type:
-                        type: string
-                        description: 匹配类型 (equal, contains, regex, jsonpath)
-                      value:
-                        type: string
-                        description: 匹配值
-                    required:
-                    - type
-                    - value
-                    type: object
-                  headers:
-                    description: Headers 请求头匹配规则
-                    items:
-                      description: Header 请求头匹配
-                      properties:
-                        name:
-                          type: string
-                          description: 请求头名称
-                        type:
-                          type: string
-                          description: 匹配类型 (equal, contains, regex)
-                        value:
-                          type: string
-                          description: 匹配值
-                      required:
-                      - name
-                      - type
-                      - value
-                      type: object
-                    type: array
-                required:
-                - method
-                - url
-                type: object
-              response:
-                description: Response 响应配置
-                properties:
-                  script:
-                    description: Script 脚本配置
-                    properties:
-                      content:
-                        type: string
-                      input:
-                        items:
-                          type: string
-                        type: array
-                      name:
-                        type: string
-                      path:
-                        type: string
-                      timeout:
-                        type: integer
-                      type:
-                        type: string
-                      env:
-                        additionalProperties:
-                          type: string
-                        type: object
-                        description: 环境变量
-                    required:
-                    - input
-                    - name
-                    - path
-                    - timeout
-                    - type
-                    type: object
-                  static:
-                    description: Static 静态响应配置
-                    properties:
-                      body:
-                        type: string
-                      headers:
-                        additionalProperties:
-                          type: string
-                        type: object
-                      status:
-                        type: integer
-                      delay:
-                        description: Delay 延迟配置
-                        properties:
-                          fixed:
-                            type: integer
-                            description: 固定延迟时间（毫秒）
-                          random:
-                            description: 随机延迟配置
-                            properties:
-                              min:
-                                type: integer
-                                description: 最小延迟时间（毫秒）
-                              max:
-                                type: integer
-                                description: 最大延迟时间（毫秒）
-                            required:
-                            - min
-                            - max
-                            type: object
-                        type: object
-                    required:
-                    - body
-                    - headers
-                    - status
-                    type: object
-                  proxy:
-                    description: Proxy 代理转发配置
-                    properties:
-                      target:
-                        type: string
-                        description: 目标地址，如 http://real-service:8080
-                      record:
-                        type: boolean
-                        description: 是否录制响应
-                      transform:
-                        description: 请求/响应转换配置
-                        properties:
-                          requestHeaders:
-                            additionalProperties:
-                              type: string
-                            type: object
-                            description: 添加/修改请求头
-                          responseHeaders:
-                            additionalProperties:
-                              type: string
-                            type: object
-                            description: 添加/修改响应头
-                        type: object
-                    required:
-                    - target
-                    type: object
-                  type:
-                    type: string
-                required:
-                - type
-                type: object
-              scripts:
-                items:
-                  description: Script 脚本配置
-                  properties:
-                    content:
-                      type: string
-                    input:
-                      items:
-                        type: string
-                      type: array
-                    name:
-                      type: string
-                    path:
-                      type: string
-                    timeout:
-                      type: integer
-                    type:
-                      type: string
-                    env:
-                      additionalProperties:
-                        type: string
-                      type: object
-                      description: 环境变量
-                  required:
-                  - input
-                  - name
-                  - path
-                  - timeout
-                  - type
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          description: BehaviorStub 是 DynaStub 的核心资源，定义行为注入规则
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: BehaviorStubSpec 定义行为注入规则
+              type: object
+              required:
+                - mode
+                - scriptVolume
+                - behaviors
+              properties:
+                mode:
+                  description: 运行模式，支持 local 或 remote
+                  type: string
+                  enum:
+                    - local
+                    - remote
+                localConfig:
+                  description: 本地模式配置
                   type: object
-                type: array
-              stubs:
-                items:
-                  description: Stub 单个stub配置
+                  required:
+                    - targetSelector
                   properties:
-                    counter:
-                      description: Counter 计数器配置
-                      properties:
-                        reset:
-                          type: boolean
-                        resetAfter:
-                          type: integer
-                      required:
-                      - reset
-                      - resetAfter
+                    targetSelector:
+                      description: 目标 Pod 选择器
                       type: object
-                    request:
-                      description: Request 请求匹配规则
                       properties:
-                        method:
-                          type: string
-                        url:
-                          description: URL URL匹配规则
-                          properties:
-                            pattern:
-                              type: string
-                            regex:
-                              type: string
-                            type:
-                              type: string
-                          required:
-                          - type
+                        matchLabels:
                           type: object
-                        body:
-                          description: Body 请求体匹配规则
-                          properties:
-                            type:
-                              type: string
-                              description: 匹配类型 (equal, contains, regex, jsonpath)
-                            value:
-                              type: string
-                              description: 匹配值
-                          required:
-                          - type
-                          - value
-                          type: object
-                        headers:
-                          description: Headers 请求头匹配规则
-                          items:
-                            description: Header 请求头匹配
-                            properties:
-                              name:
-                                type: string
-                                description: 请求头名称
-                              type:
-                                type: string
-                                description: 匹配类型 (equal, contains, regex)
-                              value:
-                                type: string
-                                description: 匹配值
-                            required:
-                            - name
-                            - type
-                            - value
-                            type: object
+                          additionalProperties:
+                            type: string
+                        matchExpressions:
                           type: array
-                      required:
-                      - method
-                      - url
-                      type: object
-                    responseRules:
-                      items:
-                        description: ResponseRule 响应规则
-                        properties:
-                          response:
-                            description: Static 静态响应配置
+                          items:
+                            type: object
                             properties:
-                              body:
+                              key:
                                 type: string
-                              headers:
-                                additionalProperties:
+                              operator:
+                                type: string
+                              values:
+                                type: array
+                                items:
                                   type: string
-                                type: object
-                              status:
-                                type: integer
-                              delay:
-                                description: Delay 延迟配置
-                                properties:
-                                  fixed:
-                                    type: integer
-                                    description: 固定延迟时间（毫秒）
-                                  random:
-                                    description: 随机延迟配置
-                                    properties:
-                                      min:
-                                        type: integer
-                                        description: 最小延迟时间（毫秒）
-                                      max:
-                                        type: integer
-                                        description: 最大延迟时间（毫秒）
-                                    required:
-                                    - min
-                                    - max
-                                    type: object
-                                type: object
-                            required:
-                            - body
-                            - headers
-                            - status
-                            type: object
-                          rule:
-                            description: Rule 规则条件
-                            properties:
-                              end:
-                                type: integer
-                              start:
-                                type: integer
-                              type:
-                                type: string
-                            required:
-                            - type
-                            type: object
-                        required:
-                        - response
-                        - rule
-                        type: object
-                      type: array
-                  required:
-                  - counter
-                  - request
-                  - responseRules
+                    sidecarImage:
+                      description: Sidecar 容器镜像
+                      type: string
+                    sidecarResources:
+                      description: Sidecar 资源限制
+                      type: object
+                      properties:
+                        limits:
+                          type: object
+                          additionalProperties:
+                            type: string
+                        requests:
+                          type: object
+                          additionalProperties:
+                            type: string
+                scriptVolume:
+                  description: 脚本卷配置
                   type: object
-                type: array
-              tls:
-                description: TLSConfig TLS配置
-                properties:
-                  enabled:
-                    type: boolean
-                  secretName:
-                    type: string
-                required:
-                - enabled
-                - secretName
-                type: object
-            required:
-            - protocol
-            - request
-            - response
-            type: object
-          status:
-            description: HTTPTestStubStatus defines the observed state of HTTPTestStub
-            properties:
-              phase:
-                description: "Phase represents the current status phase - Pending, Running, Failed"
-                type: string
-              requestCount:
-                description: RequestCount is the current request count
-                type: integer
-                format: int32
-              totalRequests:
-                description: TotalRequests is the cumulative total number of requests
-                type: integer
-                format: int64
-              lastRequestTime:
-                description: LastRequestTime is the timestamp of the last request
-                type: string
-                format: date-time
-              avgResponseTime:
-                description: AvgResponseTime is the average response time in milliseconds
-                type: integer
-                format: int64
-              errorRate:
-                description: ErrorRate is the error percentage (0-100)
-                type: integer
-                format: int32
-              totalErrors:
-                description: TotalErrors is the cumulative total number of errors
-                type: integer
-                format: int64
-              activeConnections:
-                description: ActiveConnections is the number of currently active connections
-                type: integer
-                format: int32
-            type: object
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
-    additionalPrinterColumns:
-    - name: Phase
-      type: string
-      description: The phase of the stub
-      jsonPath: .status.phase
+                  required:
+                    - hostPath
+                    - mountPath
+                  properties:
+                    hostPath:
+                      description: 宿主机脚本目录路径
+                      type: string
+                    mountPath:
+                      description: 容器内挂载路径
+                      type: string
+                behaviors:
+                  description: 行为注入列表
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - targetPath
+                      - scriptPath
+                    properties:
+                      name:
+                        description: 行为名称
+                        type: string
+                      targetPath:
+                        description: 目标可执行文件路径
+                        type: string
+                      scriptPath:
+                        description: 用户脚本路径
+                        type: string
+                      backupOriginal:
+                        description: 是否备份原命令
+                        type: boolean
+                        default: true
+                      enableLogging:
+                        description: 是否启用日志
+                        type: boolean
+                        default: false
+                      logPath:
+                        description: 日志路径
+                        type: string
+                advanced:
+                  description: 高级配置
+                  type: object
+                  properties:
+                    injectionMode:
+                      description: 注入模式
+                      type: string
+                      enum:
+                        - init-container
+                        - sidecar
+                      default: init-container
+                    restartPolicy:
+                      description: 重启策略
+                      type: string
+                      enum:
+                        - Always
+                        - OnFailure
+                        - Never
+                      default: Always
+            status:
+              description: BehaviorStubStatus 定义资源状态
+              type: object
+              properties:
+                phase:
+                  description: 当前阶段
+                  type: string
+                injectedPods:
+                  description: 已注入 Pod 数量
+                  type: integer
+                totalPods:
+                  description: 目标 Pod 总数
+                  type: integer
+                lastUpdateTime:
+                  description: 最后更新时间
+                  type: string
+                  format: date-time
+                conditions:
+                  description: 状态条件
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      observedGeneration:
+                        type: integer
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Injected
+          type: integer
+          jsonPath: .status.injectedPods
+        - name: Total
+          type: integer
+          jsonPath: .status.totalPods
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
