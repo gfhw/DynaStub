@@ -143,7 +143,6 @@ spec:
     - name: docker
       targetPath: /usr/bin/docker
       scriptPath: /data/scripts/docker-wrapper.sh
-      backupOriginal: true
       enableLogging: true
       logPath: /tmp/dynastub-docker.log
 ```
@@ -183,9 +182,10 @@ spec:
 | `name` | string | 是 | 行为名称，用于标识 |
 | `targetPath` | string | 是 | 目标可执行文件路径 |
 | `scriptPath` | string | 是 | 用户脚本路径（相对于 scriptVolume.mountPath） |
-| `backupOriginal` | bool | 否 | 是否备份原命令（默认：true） |
 | `enableLogging` | bool | 否 | 是否启用日志记录（默认：false） |
 | `logPath` | string | 否 | 日志文件路径（默认：/tmp/dynastub-{name}.log） |
+
+**注意**：由于使用 subPath 挂载会覆盖原命令，且业务容器文件系统通常只读，无法自动备份原命令。如需在脚本中调用原命令，请在构建镜像时预先将原命令备份为 `.original` 版本。
 
 ### 用户脚本编写指南
 
@@ -226,14 +226,12 @@ spec:
     - name: docker
       targetPath: /usr/bin/docker
       scriptPath: /data/scripts/docker-wrapper.sh
-      backupOriginal: true
       enableLogging: true
       logPath: /tmp/dynastub-docker.log
 
     - name: chown
       targetPath: /usr/bin/chown
       scriptPath: /data/scripts/chown-wrapper.sh
-      backupOriginal: true
       enableLogging: true
 
   advanced:

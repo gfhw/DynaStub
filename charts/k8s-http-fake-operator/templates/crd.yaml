@@ -117,10 +117,6 @@ spec:
                       scriptPath:
                         description: 用户脚本路径
                         type: string
-                      backupOriginal:
-                        description: 是否备份原命令
-                        type: boolean
-                        default: true
                       enableLogging:
                         description: 是否启用日志
                         type: boolean

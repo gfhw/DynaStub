@@ -24,7 +24,6 @@ spec:
     - name: replace-go-binary
       targetPath: /app/myapp
       scriptPath: /src/scripts/myapp-stub.sh
-      backupOriginal: true
       enableLogging: true
       logPath: /var/log/dynastub/myapp.log
   advanced:
