@@ -21,7 +21,6 @@ serviceAccount:
 podAnnotations: {}
 
 podSecurityContext:
-  runAsNonRoot: true
   seccompProfile:
     type: RuntimeDefault
 
