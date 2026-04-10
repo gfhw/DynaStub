@@ -50,6 +50,14 @@ apiGroup:
   fullName: "dynastub.example.com"
   # suffix: "example"  # 可选，如果设置了 suffix，则 API group 为 httpteststub.{suffix}.com
 
+# Autoscaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
 # Webhook configuration
 webhook:
   enabled: true
