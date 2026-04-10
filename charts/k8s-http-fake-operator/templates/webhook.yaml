@@ -13,7 +13,7 @@ webhooks:
         namespace: {{ .Release.Namespace }}
         path: /mutate-v1-pod
         port: {{ .Values.webhook.service.port }}
-      caBundle: {{ if .Values.webhook.autoGenerate }}Cg=={{ else }}{{ required "CA bundle is required when autoGenerate is false" .Values.webhook.caBundle | b64enc }}{{ end }}
+      caBundle: {{ if .Values.webhook.autoGenerate }}Cg=={{ else }}{{ required "CA bundle is required when autoGenerate is false" .Values.webhook.caBundle }}{{ end }}
     rules:
       - operations: ["CREATE", "UPDATE"]
         apiGroups: [""]
