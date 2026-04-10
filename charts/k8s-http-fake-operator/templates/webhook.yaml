@@ -53,6 +53,6 @@ metadata:
     {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
 type: kubernetes.io/tls
 data:
-  tls.crt: {{ .Values.webhook.tls.crt }}
-  tls.key: {{ .Values.webhook.tls.key }}
+  tls.crt: {{ .Values.webhook.tls.crt | b64enc }}
+  tls.key: {{ .Values.webhook.tls.key | b64enc }}
 {{- end }}
