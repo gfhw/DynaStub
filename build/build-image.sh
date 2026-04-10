@@ -236,12 +236,17 @@ build_single_image() {
 
     # Check for binary in build directory
     if [ ! -f "./$binary_name" ]; then
-        log_error "Binary not found: ./$binary_name"
-        log_error "Please ensure the $binary_name binary exists in the build directory"
-        log_error "The binary should be cross-compiled for Linux amd64"
-        return 1
+        log_warn "Binary not found: ./$binary_name"
+        log_info "Building binary using build-binaries.sh..."
+        if bash ./build-binaries.sh; then
+            log_info "Binary built successfully: ./$binary_name"
+        else
+            log_error "Failed to build binary!"
+            return 1
+        fi
+    else
+        log_info "Using existing binary: ./$binary_name"
     fi
-    log_info "Using existing binary: ./$binary_name"
 
     # Build Docker image
     log_step "Building $image_type Docker image..."
