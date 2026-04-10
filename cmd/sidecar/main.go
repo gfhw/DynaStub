@@ -14,6 +14,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -51,11 +52,19 @@ func main() {
 	}
 	log.Println("Sidecar is ready")
 
-	// 启动文件监听
+	// 启动监听
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go sidecar.WatchScripts(ctx)
+	// 启动 Watch API 监听（主监听方式）
+	go func() {
+		if err := sidecar.WatchBehaviorStub(ctx); err != nil {
+			log.Printf("WatchBehaviorStub failed: %v", err)
+			log.Println("Falling back to polling mode...")
+			// 如果 Watch 失败，回退到轮询模式
+			sidecar.WatchScripts(ctx)
+		}
+	}()
 
 	// 等待信号
 	sigCh := make(chan os.Signal, 1)
@@ -218,7 +227,7 @@ func (s *SidecarManager) SyncAllScripts() error {
 func (s *SidecarManager) syncBehaviorScript(behavior Behavior) error {
 	// 源文件路径（在 hostPath 中）
 	srcPath := filepath.Join(s.config.ScriptMountPath, behavior.ScriptPath)
-	
+
 	// 目标文件名（使用 targetPath 的最后一部分，或自定义映射）
 	// 例如：/usr/bin/docker -> docker
 	targetName := filepath.Base(behavior.TargetPath)
@@ -319,10 +328,67 @@ func (s *SidecarManager) atomicCopy(srcPath, dstPath string) error {
 	return nil
 }
 
-// WatchScripts 监听脚本变化
+// WatchBehaviorStub 监听 BehaviorStub 变更（使用 K8s Watch API）
+func (s *SidecarManager) WatchBehaviorStub(ctx context.Context) error {
+	gvr := schema.GroupVersionResource{
+		Group:    "dynastub.example.com",
+		Version:  "v1",
+		Resource: "behaviorstubs",
+	}
+
+	log.Printf("Starting to watch BehaviorStub: %s/%s", s.config.Namespace, s.config.BehaviorStubName)
+
+	watchInterface, err := s.dynamicClient.Resource(gvr).
+		Namespace(s.config.Namespace).
+		Watch(ctx, metav1.SingleObject(metav1.ObjectMeta{
+			Name:      s.config.BehaviorStubName,
+			Namespace: s.config.Namespace,
+		}))
+	if err != nil {
+		return fmt.Errorf("failed to watch BehaviorStub: %v", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Stopping BehaviorStub watch...")
+			return nil
+		case event := <-watchInterface.ResultChan():
+			switch event.Type {
+			case watch.Added, watch.Modified:
+				log.Printf("BehaviorStub %s detected, syncing scripts...", event.Type)
+				if err := s.SyncAllScripts(); err != nil {
+					log.Printf("Failed to sync scripts after %s event: %v", event.Type, err)
+				} else {
+					log.Println("Scripts synced successfully after BehaviorStub change")
+				}
+			case watch.Deleted:
+				log.Println("BehaviorStub deleted, cleaning up scripts...")
+				s.cleanupScripts()
+			case watch.Error:
+				log.Printf("Watch error occurred: %v", event.Object)
+			default:
+				log.Printf("Unknown watch event type: %v", event.Type)
+			}
+		}
+	}
+}
+
+// cleanupScripts 清理已复制的脚本
+func (s *SidecarManager) cleanupScripts() {
+	if err := os.RemoveAll(s.config.SharedDir); err != nil {
+		log.Printf("Failed to cleanup scripts directory: %v", err)
+	} else {
+		log.Printf("Cleaned up scripts directory: %s", s.config.SharedDir)
+	}
+}
+
+// WatchScripts 监听脚本变化（保持向后兼容，使用慢速轮询作为备份）
 func (s *SidecarManager) WatchScripts(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+
+	log.Println("Starting fallback polling watcher (30s interval)...")
 
 	for {
 		select {
