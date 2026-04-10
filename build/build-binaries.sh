@@ -101,16 +101,20 @@ log_info "Project root directory: $PROJECT_ROOT"
 # Build operator binary
 log_step "Building operator binary..."
 export CGO_ENABLED=0
-export GOOS="$GOOS"
-export GOARCH="$GOARCH"
+export GOOS="linux"
+export GOARCH="amd64"
 
-log_info "Building operator (${GOOS}/${GOARCH})..."
+log_info "Building operator (linux/amd64)..."
 go build -a -o "$BUILD_DIR/manager" ./cmd/main.go
 log_info "Operator binary built successfully: $BUILD_DIR/manager"
 
 # Build sidecar binary
 log_step "Building sidecar binary..."
-log_info "Building sidecar (${GOOS}/${GOARCH})..."
+export CGO_ENABLED=0
+export GOOS="linux"
+export GOARCH="amd64"
+
+log_info "Building sidecar (linux/amd64)..."
 go build -a -o "$BUILD_DIR/sidecar" ./cmd/sidecar/main.go
 log_info "Sidecar binary built successfully: $BUILD_DIR/sidecar"
 
