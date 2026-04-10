@@ -182,11 +182,11 @@ main() {
     # Set default values based on image type
     if [ "$IMAGE_TYPE" = "operator" ]; then
         IMAGE_NAME="${IMAGE_NAME:-dynastub-operator}"
-        DOCKERFILE="${DOCKERFILE:-Dockerfile}"
+        DOCKERFILE="${DOCKERFILE:-build/Dockerfile}"
         BINARY_NAME="manager"
     elif [ "$IMAGE_TYPE" = "sidecar" ]; then
         IMAGE_NAME="${IMAGE_NAME:-dynastub-sidecar}"
-        DOCKERFILE="${DOCKERFILE:-Dockerfile.sidecar}"
+        DOCKERFILE="${DOCKERFILE:-build/Dockerfile.sidecar}"
         BINARY_NAME="sidecar"
     else
         log_error "Invalid image type: $IMAGE_TYPE"
@@ -218,13 +218,13 @@ main() {
     fi
 
     # Check for binary in build directory
-    if [ ! -f "../build/$BINARY_NAME" ]; then
-        log_error "Binary not found: ../build/$BINARY_NAME"
+    if [ ! -f "./$BINARY_NAME" ]; then
+        log_error "Binary not found: ./$BINARY_NAME"
         log_error "Please ensure the $BINARY_NAME binary exists in the build directory"
         log_error "The binary should be cross-compiled for Linux amd64"
         exit 1
     fi
-    log_info "Using existing binary: ../build/$BINARY_NAME"
+    log_info "Using existing binary: ./$BINARY_NAME"
 
     # Build Docker image
     log_step "Building Docker image..."
