@@ -45,6 +45,11 @@ tolerations: []
 
 affinity: {}
 
+# API Group configuration
+apiGroup:
+  fullName: "dynastub.example.com"
+  # suffix: "example"  # 可选，如果设置了 suffix，则 API group 为 httpteststub.{suffix}.com
+
 # Webhook configuration
 webhook:
   enabled: true
