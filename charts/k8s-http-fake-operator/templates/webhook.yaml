@@ -43,7 +43,6 @@ spec:
       name: webhook
   selector:
     {{- include "k8s-http-fake-operator.selectorLabels" . | nindent 4 }}
-{{- if .Values.webhook.autoGenerate }}
 ---
 apiVersion: v1
 kind: Secret
@@ -56,5 +55,4 @@ type: kubernetes.io/tls
 data:
   tls.crt: {{ required "TLS certificate is required" .Values.webhook.tls.crt | b64enc }}
   tls.key: {{ required "TLS key is required" .Values.webhook.tls.key | b64enc }}
-{{- end }}
 {{- end }}
