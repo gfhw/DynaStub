@@ -1,18 +1,20 @@
 #!/bin/bash
 
-# Build script for k8s-http-fake-operator Docker image
-# This script automates the Docker image build process
+# Build script for DynaStub Docker images
+# This script automates the Docker image build process for both operator and sidecar
 
 set -e
 
 # Configuration
-IMAGE_NAME="${IMAGE_NAME:-k8s-http-fake-operator}"
+IMAGE_TYPE="${IMAGE_TYPE:-operator}"  # operator or sidecar
+IMAGE_NAME="${IMAGE_NAME:-}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-DOCKERFILE="${DOCKERFILE:-build/Dockerfile}"
+DOCKERFILE="${DOCKERFILE:-}"
 BUILD_CONTEXT="${BUILD_CONTEXT:-..}"
 NO_CACHE="${NO_CACHE:-false}"
 SKIP_BUILD="${SKIP_BUILD:-true}"
 IMPORT_TO_CONTAINERD="${IMPORT_TO_CONTAINERD:-true}"
+PUSH_IMAGE="${PUSH_IMAGE:-false}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,19 +45,22 @@ usage() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
-Build Docker image for k8s-http-fake-operator and optionally import to containerd
+Build Docker image for DynaStub (operator or sidecar) and optionally import to containerd
 
 OPTIONS:
-    -n, --name IMAGE_NAME       Docker image name (default: k8s-http-fake-operator)
+    -t, --type IMAGE_TYPE       Image type: operator or sidecar (default: operator)
+    -n, --name IMAGE_NAME       Docker image name (default: dynastub-operator or dynastub-sidecar)
     -t, --tag IMAGE_TAG         Docker image tag (default: latest)
-    -f, --dockerfile DOCKERFILE Path to Dockerfile (default: build/Dockerfile)
+    -f, --dockerfile DOCKERFILE Path to Dockerfile (default: build/Dockerfile or build/Dockerfile.sidecar)
     -c, --context BUILD_CONTEXT Build context directory (default: ..)
     --no-cache                  Build without using cache
-    --skip-build                Skip binary build step (default: true, uses existing manager binary)
+    --skip-build                Skip binary build step (default: true, uses existing binary)
     --no-import                 Skip importing to containerd
+    --push                      Push image to registry
     -h, --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
+    IMAGE_TYPE                  Image type: operator or sidecar
     IMAGE_NAME                  Docker image name
     IMAGE_TAG                   Docker image tag
     DOCKERFILE                  Path to Dockerfile
@@ -63,19 +68,23 @@ ENVIRONMENT VARIABLES:
     NO_CACHE                    Build without using cache (true/false)
     SKIP_BUILD                  Skip binary build step (true/false)
     IMPORT_TO_CONTAINERD        Import image to containerd after build (true/false)
+    PUSH_IMAGE                  Push image to registry (true/false)
 
 EXAMPLES:
-    # Build with default settings (uses existing manager binary)
-    $0
+    # Build operator image with default settings
+    $0 --type operator
+
+    # Build sidecar image with default settings
+    $0 --type sidecar
 
     # Build with custom name and tag
-    $0 --name my-operator --tag v1.0.0
+    $0 --type operator --name my-operator --tag v1.0.0
+
+    # Build and push image
+    $0 --type sidecar --push
 
     # Build without cache
-    $0 --no-cache
-
-    # Build but don't import to containerd
-    $0 --no-import
+    $0 --type operator --no-cache
 
 EOF
 }
@@ -83,6 +92,10 @@ EOF
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --type)
+            IMAGE_TYPE="$2"
+            shift 2
+            ;;
         -n|--name)
             IMAGE_NAME="$2"
             shift 2
@@ -109,6 +122,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-import)
             IMPORT_TO_CONTAINERD="false"
+            shift
+            ;;
+        --push)
+            PUSH_IMAGE="true"
             shift
             ;;
         -h|--help)
@@ -162,7 +179,23 @@ import_to_containerd() {
 
 # Main build process
 main() {
+    # Set default values based on image type
+    if [ "$IMAGE_TYPE" = "operator" ]; then
+        IMAGE_NAME="${IMAGE_NAME:-dynastub-operator}"
+        DOCKERFILE="${DOCKERFILE:-Dockerfile}"
+        BINARY_NAME="manager"
+    elif [ "$IMAGE_TYPE" = "sidecar" ]; then
+        IMAGE_NAME="${IMAGE_NAME:-dynastub-sidecar}"
+        DOCKERFILE="${DOCKERFILE:-Dockerfile.sidecar}"
+        BINARY_NAME="sidecar"
+    else
+        log_error "Invalid image type: $IMAGE_TYPE"
+        log_error "Valid types: operator, sidecar"
+        exit 1
+    fi
+
     log_info "Starting Docker image build process..."
+    log_info "Image type: $IMAGE_TYPE"
     log_info "Image name: $IMAGE_NAME"
     log_info "Image tag: $IMAGE_TAG"
     log_info "Dockerfile: $DOCKERFILE"
@@ -170,6 +203,7 @@ main() {
     log_info "No cache: $NO_CACHE"
     log_info "Skip build: $SKIP_BUILD"
     log_info "Import to containerd: $IMPORT_TO_CONTAINERD"
+    log_info "Push image: $PUSH_IMAGE"
 
     # Check if Docker is installed
     if ! command -v docker &> /dev/null; then
@@ -183,14 +217,14 @@ main() {
         exit 1
     fi
 
-    # Check for manager binary
-    if [ ! -f "manager" ]; then
-        log_error "Binary not found: manager"
-        log_error "Please ensure the manager binary exists in the build directory"
+    # Check for binary in build directory
+    if [ ! -f "../build/$BINARY_NAME" ]; then
+        log_error "Binary not found: ../build/$BINARY_NAME"
+        log_error "Please ensure the $BINARY_NAME binary exists in the build directory"
         log_error "The binary should be cross-compiled for Linux amd64"
         exit 1
     fi
-    log_info "Using existing binary: manager"
+    log_info "Using existing binary: ../build/$BINARY_NAME"
 
     # Build Docker image
     log_step "Building Docker image..."
@@ -230,12 +264,27 @@ main() {
             import_to_containerd "$TAR_FILE"
         fi
 
+        # Push image if enabled
+        if [ "$PUSH_IMAGE" = "true" ]; then
+            log_step "Pushing image to registry..."
+            if docker push "$IMAGE_NAME:$IMAGE_TAG"; then
+                log_info "Image pushed successfully!"
+                log_info "Image: $IMAGE_NAME:$IMAGE_TAG"
+            else
+                log_error "Failed to push image!"
+                exit 1
+            fi
+        fi
+
         log_step "Build complete!"
         log_info "Summary:"
         log_info "  - Docker image: $IMAGE_NAME:$IMAGE_TAG"
         log_info "  - Saved to: $TAR_FILE"
         if [ "$IMPORT_TO_CONTAINERD" = "true" ]; then
             log_info "  - Imported to containerd: Yes"
+        fi
+        if [ "$PUSH_IMAGE" = "true" ]; then
+            log_info "  - Pushed to registry: Yes"
         fi
         log_info ""
         log_info "You can now deploy using Helm:"
