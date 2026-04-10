@@ -14,13 +14,16 @@ COPY scripts/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh
 
-# Copy TLS certificates
-COPY build/certs/tls.crt /etc/tls/tls.crt
-COPY build/certs/tls.key /etc/tls/tls.key
+# Create webhook certificates directory
+RUN mkdir -p /tmp/k8s-webhook-server/serving-certs
 
-RUN chmod 644 /etc/tls/tls.crt && chmod 600 /etc/tls/tls.key
+# Copy TLS certificates to webhook directory
+COPY build/certs/tls.crt /tmp/k8s-webhook-server/serving-certs/tls.crt
+COPY build/certs/tls.key /tmp/k8s-webhook-server/serving-certs/tls.key
 
-EXPOSE 8080 8443 8081
+RUN chmod 644 /tmp/k8s-webhook-server/serving-certs/tls.crt && chmod 600 /tmp/k8s-webhook-server/serving-certs/tls.key
+
+EXPOSE 9443 8081
 
 # Run the entrypoint script which will keep the container running
 CMD ["/entrypoint.sh"]

@@ -17,10 +17,7 @@ else
     ARGS="$ARGS --health-probe-bind-address=:8081"
     ARGS="$ARGS --leader-elect=false"
     ARGS="$ARGS --enable-http2=false"
-    ARGS="$ARGS --http-port=8080"
-    ARGS="$ARGS --https-port=8443"
-    ARGS="$ARGS --tls-cert-file=/etc/tls/tls.crt"
-    ARGS="$ARGS --tls-key-file=/etc/tls/tls.key"
+    ARGS="$ARGS --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs"
     
     echo "Starting manager with default arguments: $ARGS"
     
