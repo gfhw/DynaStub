@@ -68,7 +68,11 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, err
 		}
 		logger.Info("Added finalizer to BehaviorStub", "name", behaviorStub.Name)
-		return ctrl.Result{}, nil
+		// 重新获取对象以获取最新的 resourceVersion
+		if err := r.Get(ctx, req.NamespacedName, behaviorStub); err != nil {
+			logger.Error(err, "unable to fetch BehaviorStub after adding finalizer")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// 4. 确保 webhook 配置存在（第一个 CR 创建时会创建 webhook）
