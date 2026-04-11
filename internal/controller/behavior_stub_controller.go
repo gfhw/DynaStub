@@ -190,17 +190,14 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 	// Webhook 不存在，创建它
 	logger.Info("Creating MutatingWebhookConfiguration")
 
-	// 读取 CA 证书
-	caCertPath := os.Getenv("WEBHOOK_CA_CERT_PATH")
-	if caCertPath == "" {
-		caCertPath = "/tmp/k8s-webhook-server/serving-certs/ca.crt"
-	}
-	caCert, err := os.ReadFile(caCertPath)
+	// 读取 CA 证书（对于自签名证书，tls.crt 就是 CA 证书）
+	certPath := "/tmp/k8s-webhook-server/serving-certs/tls.crt"
+	caCert, err := os.ReadFile(certPath)
 	if err != nil {
-		logger.Info("Failed to read CA cert, using empty CABundle", "path", caCertPath, "error", err)
+		logger.Info("Failed to read cert, using empty CABundle", "path", certPath, "error", err)
 		caCert = []byte{}
 	} else {
-		logger.Info("Successfully read CA cert", "path", caCertPath, "certLength", len(caCert))
+		logger.Info("Successfully read cert", "path", certPath, "certLength", len(caCert))
 	}
 
 	// 获取 webhook service 的 namespace 和证书信息
