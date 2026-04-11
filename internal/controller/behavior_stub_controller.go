@@ -214,7 +214,7 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 				Name: webhookName,
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					Service: &admissionregistrationv1.ServiceReference{
-						Name:      "dynastub-k8s-http-fake-operator-webhook",
+						Name:      "k8s-http-fake-operator-webhook",
 						Namespace: "default",
 						Path:      strPtr("/mutate-v1-pod"),
 						Port:      int32Ptr(443),
