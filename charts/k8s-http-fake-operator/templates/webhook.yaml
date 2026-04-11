@@ -20,9 +20,7 @@ webhooks:
         apiVersions: ["v1"]
         resources: ["pods"]
         scope: Namespaced
-    namespaceSelector:
-      matchLabels:
-        dynastub-injection: enabled
+    namespaceSelector: {}
     failurePolicy: Fail
     sideEffects: None
     admissionReviewVersions: ["v1"]
