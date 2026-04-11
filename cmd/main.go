@@ -17,10 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	webappv1 "httpteststub.example.com/api/v1"
 	"httpteststub.example.com/internal/controller"
+	"httpteststub.example.com/internal/webhook"
 )
 
 var (
@@ -97,7 +98,7 @@ func main() {
 		})
 	}
 
-	webhookServer := webhook.NewServer(webhook.Options{
+	webhookServer := ctrlwebhook.NewServer(ctrlwebhook.Options{
 		TLSOpts: webhookTLSOpts,
 	})
 
@@ -152,6 +153,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "BehaviorStub")
 		os.Exit(1)
 	}
+
+	// 注册 webhook handler
+	setupLog.Info("Setting up webhook server")
+	whServer := mgr.GetWebhookServer()
+	whServer.Register("/mutate-v1-pod", &ctrlwebhook.Admission{
+		Handler: &webhook.PodMutator{
+			Client: mgr.GetClient(),
+		},
+	})
 
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")
