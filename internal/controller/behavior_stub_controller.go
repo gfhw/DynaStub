@@ -2,18 +2,27 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	dynastubv1 "httpteststub.example.com/api/v1"
+)
+
+const (
+	behaviorStubFinalizer = "behaviorstub.dynastub.example.com/finalizer"
+	webhookName           = "mpod.kb.io"
 )
 
 // BehaviorStubReconciler reconciles a BehaviorStub object
@@ -28,6 +37,7 @@ type BehaviorStubReconciler struct {
 //+kubebuilder:rbac:groups=dynastub.example.com,resources=behaviorstubs/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -45,7 +55,31 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	// 2. 根据 targetSelector 查找目标 Pod
+	// 2. 处理删除逻辑
+	if !behaviorStub.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, behaviorStub)
+	}
+
+	// 3. 添加 finalizer
+	if !controllerutil.ContainsFinalizer(behaviorStub, behaviorStubFinalizer) {
+		controllerutil.AddFinalizer(behaviorStub, behaviorStubFinalizer)
+		if err := r.Update(ctx, behaviorStub); err != nil {
+			logger.Error(err, "unable to add finalizer")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Added finalizer to BehaviorStub", "name", behaviorStub.Name)
+		return ctrl.Result{}, nil
+	}
+
+	// 4. 确保 webhook 配置存在（第一个 CR 创建时会创建 webhook）
+	if err := r.ensureWebhookConfiguration(ctx); err != nil {
+		logger.Error(err, "unable to ensure webhook configuration")
+		r.Recorder.Eventf(behaviorStub, corev1.EventTypeWarning, "WebhookError",
+			"Failed to ensure webhook configuration: %v", err)
+		return ctrl.Result{}, err
+	}
+
+	// 5. 根据 targetSelector 查找目标 Pod
 	podList := &corev1.PodList{}
 	selector, err := metav1.LabelSelectorAsSelector(&behaviorStub.Spec.TargetSelector)
 	if err != nil {
@@ -60,7 +94,7 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	// 3. 统计注入状态
+	// 6. 统计注入状态
 	totalPods := int32(len(podList.Items))
 	injectedPods := int32(0)
 
@@ -71,7 +105,7 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 4. 更新 CR 状态
+	// 7. 更新 CR 状态
 	phase := "Pending"
 	if totalPods > 0 {
 		if injectedPods == totalPods {
@@ -96,6 +130,160 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	)
 
 	return ctrl.Result{}, nil
+}
+
+// reconcileDelete 处理删除逻辑
+func (r *BehaviorStubReconciler) reconcileDelete(ctx context.Context, behaviorStub *dynastubv1.BehaviorStub) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling delete for BehaviorStub", "name", behaviorStub.Name, "namespace", behaviorStub.Namespace)
+
+	// 检查是否还有其他 CR
+	behaviorStubList := &dynastubv1.BehaviorStubList{}
+	if err := r.List(ctx, behaviorStubList); err != nil {
+		logger.Error(err, "unable to list BehaviorStubs")
+		return ctrl.Result{}, err
+	}
+
+	// 如果这是最后一个 CR，删除 webhook 配置
+	if len(behaviorStubList.Items) <= 1 {
+		logger.Info("This is the last BehaviorStub, deleting webhook configuration")
+		if err := r.deleteWebhookConfiguration(ctx); err != nil {
+			logger.Error(err, "unable to delete webhook configuration")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Webhook configuration deleted successfully")
+	} else {
+		logger.Info("Other BehaviorStubs exist, keeping webhook configuration",
+			"remainingCount", len(behaviorStubList.Items)-1)
+	}
+
+	// 移除 finalizer
+	controllerutil.RemoveFinalizer(behaviorStub, behaviorStubFinalizer)
+	if err := r.Update(ctx, behaviorStub); err != nil {
+		logger.Error(err, "unable to remove finalizer")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Finalizer removed, BehaviorStub can be deleted")
+	return ctrl.Result{}, nil
+}
+
+// ensureWebhookConfiguration 确保 webhook 配置存在
+func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context) error {
+	logger := log.FromContext(ctx)
+
+	webhook := &admissionregistrationv1.MutatingWebhookConfiguration{}
+	err := r.Get(ctx, client.ObjectKey{Name: "dynastub-k8s-http-fake-operator-webhook"}, webhook)
+	if err == nil {
+		// Webhook 已存在
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to get webhook configuration: %w", err)
+	}
+
+	// Webhook 不存在，创建它
+	logger.Info("Creating MutatingWebhookConfiguration")
+
+	// 获取 webhook service 的 namespace 和证书信息
+	// 这里假设 service 和 secret 已经由 Helm 创建
+	webhook = &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dynastub-k8s-http-fake-operator-webhook",
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "dynastub-operator",
+			},
+		},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
+				Name: webhookName,
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
+						Name:      "dynastub-k8s-http-fake-operator-webhook",
+						Namespace: "default",
+						Path:      strPtr("/mutate-v1-pod"),
+						Port:      int32Ptr(443),
+					},
+					// CABundle 会在创建后由 cert-manager 或手动更新
+					CABundle: []byte{},
+				},
+				Rules: []admissionregistrationv1.RuleWithOperations{
+					{
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+							admissionregistrationv1.Update,
+						},
+						Rule: admissionregistrationv1.Rule{
+							APIGroups:   []string{""},
+							APIVersions: []string{"v1"},
+							Resources:   []string{"pods"},
+							Scope:       scopePtr(admissionregistrationv1.NamespacedScope),
+						},
+					},
+				},
+				NamespaceSelector:       &metav1.LabelSelector{},
+				FailurePolicy:           failurePolicyPtr(admissionregistrationv1.Fail),
+				SideEffects:             sideEffectPtr(admissionregistrationv1.SideEffectClassNone),
+				AdmissionReviewVersions: []string{"v1"},
+			},
+		},
+	}
+
+	if err := r.Create(ctx, webhook); err != nil {
+		return fmt.Errorf("failed to create webhook configuration: %w", err)
+	}
+
+	logger.Info("MutatingWebhookConfiguration created successfully")
+	return nil
+}
+
+// deleteWebhookConfiguration 删除 webhook 配置
+func (r *BehaviorStubReconciler) deleteWebhookConfiguration(ctx context.Context) error {
+	logger := log.FromContext(ctx)
+
+	webhook := &admissionregistrationv1.MutatingWebhookConfiguration{}
+	err := r.Get(ctx, client.ObjectKey{Name: "dynastub-k8s-http-fake-operator-webhook"}, webhook)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Webhook 不存在，无需删除
+			return nil
+		}
+		return fmt.Errorf("failed to get webhook configuration: %w", err)
+	}
+
+	// 检查是否由 operator 管理
+	if webhook.Labels["app.kubernetes.io/managed-by"] != "dynastub-operator" {
+		logger.Info("Webhook not managed by operator, skipping deletion")
+		return nil
+	}
+
+	if err := r.Delete(ctx, webhook); err != nil {
+		return fmt.Errorf("failed to delete webhook configuration: %w", err)
+	}
+
+	logger.Info("MutatingWebhookConfiguration deleted successfully")
+	return nil
+}
+
+// Helper functions
+func strPtr(s string) *string {
+	return &s
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
+func scopePtr(s admissionregistrationv1.ScopeType) *admissionregistrationv1.ScopeType {
+	return &s
+}
+
+func failurePolicyPtr(f admissionregistrationv1.FailurePolicyType) *admissionregistrationv1.FailurePolicyType {
+	return &f
+}
+
+func sideEffectPtr(s admissionregistrationv1.SideEffectClass) *admissionregistrationv1.SideEffectClass {
+	return &s
 }
 
 // isPodInjected 检查 Pod 是否已被注入 Sidecar

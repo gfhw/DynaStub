@@ -8,15 +8,16 @@ To get started:
 2. View the service:
    kubectl get svc {{ include "k8s-http-fake-operator.fullname" . }} -n {{ .Release.Namespace }}
 
-3. Create a sample HTTPTestStub:
+3. Create a sample BehaviorStub:
    kubectl apply -f config/samples/httpteststub.example.com_v1_httpteststub.yaml
 
-4. Test the stub:
-   kubectl port-forward svc/{{ include "k8s-http-fake-operator.fullname" . }} 8080:8080 -n {{ .Release.Namespace }}
-   curl http://localhost:8080/api/health
+4. Check the BehaviorStub status:
+   kubectl get behaviorstubs -n {{ .Release.Namespace }}
 
-5. Check health status:
-   kubectl port-forward svc/{{ include "k8s-http-fake-operator.fullname" . }} 8081:8081 -n {{ .Release.Namespace }}
-   curl http://localhost:8081/healthz
+5. View operator logs:
+   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "k8s-http-fake-operator.name" . }}
+
+Note: The MutatingWebhookConfiguration will be automatically created when you create the first BehaviorStub,
+and will be automatically deleted when you delete the last BehaviorStub.
 
 For more information, visit: https://github.com/gfhw/k8s-http-fake-operator

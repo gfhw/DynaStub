@@ -59,6 +59,19 @@ rules:
   - get
   - list
   - watch
+# MutatingWebhookConfiguration 权限（用于动态管理 webhook）
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
