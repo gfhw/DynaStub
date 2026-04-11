@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -189,6 +190,19 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 	// Webhook 不存在，创建它
 	logger.Info("Creating MutatingWebhookConfiguration")
 
+	// 读取 CA 证书
+	caCertPath := os.Getenv("WEBHOOK_CA_CERT_PATH")
+	if caCertPath == "" {
+		caCertPath = "/tmp/k8s-webhook-server/serving-certs/ca.crt"
+	}
+	caCert, err := os.ReadFile(caCertPath)
+	if err != nil {
+		logger.Info("Failed to read CA cert, using empty CABundle", "path", caCertPath, "error", err)
+		caCert = []byte{}
+	} else {
+		logger.Info("Successfully read CA cert", "path", caCertPath, "certLength", len(caCert))
+	}
+
 	// 获取 webhook service 的 namespace 和证书信息
 	// 这里假设 service 和 secret 已经由 Helm 创建
 	webhook = &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -208,12 +222,13 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 						Path:      strPtr("/mutate-v1-pod"),
 						Port:      int32Ptr(443),
 					},
-					CABundle: []byte{},
+					CABundle: caCert,
 				},
 				Rules: []admissionregistrationv1.RuleWithOperations{
 					{
 						Operations: []admissionregistrationv1.OperationType{
 							admissionregistrationv1.Create,
+							admissionregistrationv1.Update,
 						},
 						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{""},
@@ -223,15 +238,7 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 						},
 					},
 				},
-				NamespaceSelector: &metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "kubernetes.io/metadata.name",
-							Operator: metav1.LabelSelectorOpNotIn,
-							Values:   []string{"kube-system", "kube-public"},
-						},
-					},
-				},
+				NamespaceSelector:       &metav1.LabelSelector{},
 				FailurePolicy:           failurePolicyPtr(admissionregistrationv1.Ignore),
 				SideEffects:             sideEffectPtr(admissionregistrationv1.SideEffectClassNone),
 				AdmissionReviewVersions: []string{"v1"},
