@@ -119,7 +119,7 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	err = r.updateStatus(ctx, behaviorStub, phase, injectedPods, totalPods)
+	err = r.updateStatusWithRetry(ctx, req, phase, injectedPods, totalPods)
 	if err != nil {
 		logger.Error(err, "unable to update BehaviorStub status")
 		return ctrl.Result{}, err
@@ -208,14 +208,12 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 						Path:      strPtr("/mutate-v1-pod"),
 						Port:      int32Ptr(443),
 					},
-					// CABundle 会在创建后由 cert-manager 或手动更新
 					CABundle: []byte{},
 				},
 				Rules: []admissionregistrationv1.RuleWithOperations{
 					{
 						Operations: []admissionregistrationv1.OperationType{
 							admissionregistrationv1.Create,
-							admissionregistrationv1.Update,
 						},
 						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{""},
@@ -225,10 +223,19 @@ func (r *BehaviorStubReconciler) ensureWebhookConfiguration(ctx context.Context)
 						},
 					},
 				},
-				NamespaceSelector:       &metav1.LabelSelector{},
-				FailurePolicy:           failurePolicyPtr(admissionregistrationv1.Fail),
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   []string{"kube-system", "kube-public"},
+						},
+					},
+				},
+				FailurePolicy:           failurePolicyPtr(admissionregistrationv1.Ignore),
 				SideEffects:             sideEffectPtr(admissionregistrationv1.SideEffectClassNone),
 				AdmissionReviewVersions: []string{"v1"},
+				TimeoutSeconds:          int32Ptr(30),
 			},
 		},
 	}
@@ -349,6 +356,25 @@ func (r *BehaviorStubReconciler) updateStatus(ctx context.Context, behaviorStub 
 	}
 
 	return r.Status().Update(ctx, behaviorStub)
+}
+
+func (r *BehaviorStubReconciler) updateStatusWithRetry(ctx context.Context, req ctrl.Request, phase string, injectedPods, totalPods int32) error {
+	logger := log.FromContext(ctx)
+	for i := 0; i < 3; i++ {
+		behaviorStub := &dynastubv1.BehaviorStub{}
+		if err := r.Get(ctx, req.NamespacedName, behaviorStub); err != nil {
+			return err
+		}
+		if err := r.updateStatus(ctx, behaviorStub, phase, injectedPods, totalPods); err != nil {
+			if errors.IsConflict(err) {
+				logger.Info("Conflict updating status, retrying", "attempt", i+1)
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update status after 3 retries")
 }
 
 // SetupWithManager sets up the controller with the Manager.
