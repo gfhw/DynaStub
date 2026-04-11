@@ -174,12 +174,6 @@ spec:
         - name: Phase
           type: string
           jsonPath: .status.phase
-        - name: Injected
-          type: integer
-          jsonPath: .status.injectedPods
-        - name: Total
-          type: integer
-          jsonPath: .status.totalPods
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
