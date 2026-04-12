@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: k8s-http-fake-operator-webhook
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
@@ -16,17 +16,4 @@ spec:
       name: webhook
   selector:
     {{- include "k8s-http-fake-operator.selectorLabels" . | nindent 4 }}
----
-# Webhook TLS Secret - must be created before the operator pod starts
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ .Values.webhook.certSecretName }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "k8s-http-fake-operator.labels" . | nindent 4 }}
-type: kubernetes.io/tls
-data:
-  tls.crt: {{ .Values.webhook.tls.crt }}
-  tls.key: {{ .Values.webhook.tls.key }}
 {{- end }}

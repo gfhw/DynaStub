@@ -16,8 +16,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"httpteststub.example.com/internal/certgen"
 )
 
 const (
@@ -25,6 +28,18 @@ const (
 )
 
 func main() {
+	// 检查是否为证书生成模式
+	certGenMode := getEnv("CERTGEN_MODE", "false")
+	if certGenMode == "true" {
+		log.Println("Running in certificate generation mode...")
+		if err := runCertGenMode(); err != nil {
+			log.Fatalf("Certificate generation failed: %v", err)
+		}
+		log.Println("Certificate generation completed successfully")
+		return
+	}
+
+	// 正常运行模式
 	log.Println("Starting DynaStub Sidecar...")
 
 	// 获取配置
@@ -76,6 +91,75 @@ func main() {
 
 	// 清理 ready marker
 	os.Remove(readyMarkerFile)
+}
+
+// runCertGenMode 运行证书生成模式
+func runCertGenMode() error {
+	// 读取证书生成配置
+	namespace := getEnv("NAMESPACE", "default")
+	secretName := getEnv("SECRET_NAME", "dynastub-webhook-tls")
+	webhookName := getEnv("WEBHOOK_NAME", "dynastub-k8s-http-fake-operator-webhook")
+	serviceName := getEnv("SERVICE_NAME", "k8s-http-fake-operator-webhook")
+
+	log.Printf("Certificate generation config: namespace=%s, secretName=%s, webhookName=%s, serviceName=%s",
+		namespace, secretName, webhookName, serviceName)
+
+	// 创建 K8s 客户端
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		kubeconfig := os.Getenv("KUBECONFIG")
+		if kubeconfig == "" {
+			kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
+		}
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return fmt.Errorf("failed to create Kubernetes config: %v", err)
+		}
+	}
+
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %v", err)
+	}
+
+	// 检查证书是否已存在且有效
+	exists, err := certgen.CertExistsAndValid(client, namespace, secretName)
+	if err != nil {
+		return fmt.Errorf("failed to check existing certificate: %v", err)
+	}
+	if exists {
+		log.Println("Valid certificate already exists, skipping generation")
+		return nil
+	}
+
+	// 生成证书
+	hosts := []string{
+		serviceName,
+		fmt.Sprintf("%s.%s", serviceName, namespace),
+		fmt.Sprintf("%s.%s.svc", serviceName, namespace),
+		fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
+	}
+
+	log.Printf("Generating certificates with DNS names: %v", hosts)
+	caCert, serverCert, serverKey, err := certgen.GenerateCertificates(hosts)
+	if err != nil {
+		return fmt.Errorf("failed to generate certificates: %v", err)
+	}
+
+	// 创建或更新 Secret
+	if err := certgen.CreateOrUpdateSecret(client, namespace, secretName, caCert, serverCert, serverKey); err != nil {
+		return fmt.Errorf("failed to create/update secret: %v", err)
+	}
+	log.Printf("Secret %s/%s created/updated successfully", namespace, secretName)
+
+	// 创建或更新 MutatingWebhookConfiguration
+	log.Printf("Creating/updating MutatingWebhookConfiguration: %s", webhookName)
+	if err := certgen.CreateOrUpdateWebhookConfiguration(client, webhookName, namespace, serviceName, caCert); err != nil {
+		return fmt.Errorf("failed to create/update webhook configuration: %v", err)
+	}
+	log.Printf("MutatingWebhookConfiguration %s created/updated successfully", webhookName)
+
+	return nil
 }
 
 // Config 配置结构

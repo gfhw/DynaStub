@@ -43,6 +43,16 @@ spec:
           env:
             - name: API_GROUP
               value: {{ include "k8s-http-fake-operator.apiGroup" . }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: WEBHOOK_SERVICE_NAME
+              value: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
+            - name: WEBHOOK_CONFIG_NAME
+              value: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
+            - name: WEBHOOK_CERT_SECRET_NAME
+              value: {{ .Values.webhook.certSecretName }}
           volumeMounts:
             {{- if .Values.webhook.enabled }}
             - name: webhook-certs

@@ -295,6 +295,22 @@ go run ./cmd/main.go
 
 ### 构建镜像
 
+#### 1. 编译二进制文件
+
+```bash
+# 编译 Operator Manager（Linux x86）
+go build -o build/manager -ldflags="-s -w" -tags=netgo ./cmd/main.go
+
+# 编译 Sidecar（Linux x86）  
+go build -o build/sidecar -ldflags="-s -w" -tags=netgo ./cmd/sidecar/main.go
+
+# 交叉编译（如果需要在不同平台编译）
+GOOS=linux GOARCH=amd64 go build -o build/manager-linux-x86 -ldflags="-s -w" -tags=netgo ./cmd/main.go
+GOOS=linux GOARCH=amd64 go build -o build/sidecar-linux-x86 -ldflags="-s -w" -tags=netgo ./cmd/sidecar/main.go
+```
+
+#### 2. 构建 Docker 镜像
+
 ```bash
 # 构建 Operator 镜像
 docker build -t dynastub:latest .
@@ -348,7 +364,27 @@ kubectl exec <pod-name> -c <main-container> -- cat /usr/bin/docker
 kubectl exec <pod-name> -c <main-container> -- cat /tmp/dynastub.log
 ```
 
-## 与业界工具对比
+#### 技术栈亮点
+
+DynaStub 项目展示了完整的 Kubernetes Operator 开发能力，涵盖了以下核心技术栈：
+
+### 🎯 核心技术栈
+
+- **Operator 开发框架**：Kubebuilder/Controller-Runtime，完整的 CRD 和 Controller 实现
+- **Webhook 机制**：MutatingWebhookConfiguration，TLS 证书动态管理，准入控制
+- **Helm 部署体系**：完整的 Chart 打包，Helm Hook 自动化部署
+- **证书管理**：动态 TLS 证书生成，DNS SAN 配置，Secret 安全存储
+- **边车模式**：Sidecar 容器注入，双模式设计（证书生成 + 文件拷贝）
+- **Job 和 Hook**：Kubernetes Job 任务，部署生命周期管理
+
+### 🌟 项目亮点
+
+- **架构先进**：Operator + Webhook + Sidecar 的完整架构设计
+- **工程化实践**：完整的 CI/CD 支持，配置管理，故障恢复机制
+- **安全性设计**：完整的 TLS 证书管理，RBAC 权限控制
+- **多租户支持**：动态证书生成，支持多环境部署
+
+### 与业界工具对比
 
 ### 现有工具分析
 

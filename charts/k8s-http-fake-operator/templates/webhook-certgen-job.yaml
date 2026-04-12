@@ -1,0 +1,77 @@
+{{- if .Values.webhook.certManager.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "patch", "update"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["create", "get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      serviceAccountName: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+      restartPolicy: Never
+      containers:
+        - name: certgen
+          image: {{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag }}
+          imagePullPolicy: {{ .Values.sidecar.image.pullPolicy }}
+          env:
+            - name: CERTGEN_MODE
+              value: "true"
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: SECRET_NAME
+              value: {{ .Values.webhook.certSecretName }}
+            - name: WEBHOOK_NAME
+              value: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
+            - name: SERVICE_NAME
+              value: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
+{{- end }}
