@@ -22,9 +22,6 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create", "get", "patch", "update"]
-  - apiGroups: ["admissionregistration.k8s.io"]
-    resources: ["mutatingwebhookconfigurations"]
-    verbs: ["create", "get", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -38,6 +35,36 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["create", "get", "list", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
   name: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
 subjects:
   - kind: ServiceAccount
