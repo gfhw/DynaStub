@@ -14,7 +14,7 @@ spec:
   behaviors:
   - name: replace-ls
     targetPath: /bin/ls
-    scriptPath: ls  # 注意：这里直接是脚本文件名，没有路径
+    scriptPath: ls
     enableLogging: true
     logPath: /var/log/dynastub/ls.log
   sidecarResources:
