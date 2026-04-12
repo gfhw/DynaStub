@@ -79,9 +79,11 @@ metadata:
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # 暂时注释掉自动删除策略，方便调试
+    # "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  ttlSecondsAfterFinished: 60
+  # 延长保留时间到1小时，方便查看日志
+  ttlSecondsAfterFinished: 3600
   template:
     spec:
       serviceAccountName: {{ include "k8s-http-fake-operator.fullname" . }}-certgen
@@ -101,4 +103,14 @@ spec:
               value: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
             - name: SERVICE_NAME
               value: {{ include "k8s-http-fake-operator.fullname" . }}-webhook
+            - name: LOG_LEVEL
+              value: "debug"
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/certgen
+      volumes:
+        - name: logs
+          hostPath:
+            path: /var/log/dynastub-certgen
+            type: DirectoryOrCreate
 {{- end }}

@@ -28,14 +28,41 @@ const (
 )
 
 func main() {
+	// 设置日志输出到文件（如果指定了日志路径）
+	logFile := getEnv("LOG_FILE", "/var/log/certgen/certgen.log")
+	if logFile != "" {
+		// 确保日志目录存在
+		logDir := filepath.Dir(logFile)
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			log.Printf("Warning: Failed to create log directory %s: %v", logDir, err)
+		} else {
+			// 打开日志文件
+			f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Printf("Warning: Failed to open log file %s: %v", logFile, err)
+			} else {
+				defer f.Close()
+				// 同时输出到文件和标准输出
+				log.SetOutput(io.MultiWriter(os.Stdout, f))
+				log.Printf("Logging to file: %s", logFile)
+			}
+		}
+	}
+
 	// 检查是否为证书生成模式
 	certGenMode := getEnv("CERTGEN_MODE", "false")
 	if certGenMode == "true" {
+		log.Println("========================================")
 		log.Println("Running in certificate generation mode...")
+		log.Println("========================================")
 		if err := runCertGenMode(); err != nil {
-			log.Fatalf("Certificate generation failed: %v", err)
+			log.Printf("ERROR: Certificate generation failed: %v", err)
+			log.Println("========================================")
+			os.Exit(1)
 		}
+		log.Println("========================================")
 		log.Println("Certificate generation completed successfully")
+		log.Println("========================================")
 		return
 	}
 
