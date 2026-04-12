@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -29,6 +30,14 @@ type PodMutator struct {
 // Handle 处理 Pod 创建请求
 func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.FromContext(ctx)
+
+	// 安全检查：如果 Decoder 为 nil，手动初始化
+	if m.Decoder == nil {
+		log.Info("Decoder is nil, initializing manually")
+		scheme := runtime.NewScheme()
+		_ = corev1.AddToScheme(scheme)
+		m.Decoder = admission.NewDecoder(scheme)
+	}
 
 	pod := &corev1.Pod{}
 	err := m.Decoder.Decode(req, pod)
@@ -193,7 +202,9 @@ func SetupWebhookWithManager(mgr manager.Manager) error {
 	}
 
 	hookServer := mgr.GetWebhookServer()
-	hookServer.Register("/mutate-v1-pod", &admission.Webhook{Handler: mutator})
+	hookServer.Register("/mutate-v1-pod", &admission.Webhook{
+		Handler: mutator,
+	})
 
 	return nil
 }
