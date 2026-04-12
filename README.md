@@ -372,13 +372,13 @@ spec:
   behaviors:
     - name: docker
       targetPath: /usr/bin/docker
-      scriptPath: /data/scripts/docker-wrapper.sh
+      scriptPath: docker  # 直接是脚本文件名，没有路径
       enableLogging: true
       logPath: /tmp/dynastub-docker.log
 
     - name: chown
       targetPath: /usr/bin/chown
-      scriptPath: /data/scripts/chown-wrapper.sh
+      scriptPath: chown  # 直接是脚本文件名，没有路径
       enableLogging: true
 
   advanced:
@@ -395,13 +395,13 @@ spec:
 behaviors:
   - name: docker
     targetPath: /usr/bin/docker
-    scriptPath: /data/scripts/docker-wrapper.sh
+    scriptPath: docker  # 直接是脚本文件名，没有路径
   - name: kubectl
     targetPath: /usr/local/bin/kubectl
-    scriptPath: /data/scripts/kubectl-wrapper.sh
+    scriptPath: kubectl  # 直接是脚本文件名，没有路径
   - name: curl
     targetPath: /usr/bin/curl
-    scriptPath: /data/scripts/curl-wrapper.sh
+    scriptPath: curl  # 直接是脚本文件名，没有路径
 ```
 
 **实现机制**：
