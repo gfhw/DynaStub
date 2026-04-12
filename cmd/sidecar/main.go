@@ -149,41 +149,25 @@ func runCertGenMode() error {
 		return fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
 
-	var caCert []byte
+	// 每次部署/升级都重新生成证书，确保使用最新配置
+	hosts := []string{
+		serviceName,
+		fmt.Sprintf("%s.%s", serviceName, namespace),
+		fmt.Sprintf("%s.%s.svc", serviceName, namespace),
+		fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
+	}
 
-	// 检查证书是否已存在且有效
-	exists, err := certgen.CertExistsAndValid(client, namespace, secretName)
+	log.Printf("Generating certificates with DNS names: %v", hosts)
+	caCert, serverCert, serverKey, err := certgen.GenerateCertificates(hosts)
 	if err != nil {
-		return fmt.Errorf("failed to check existing certificate: %v", err)
+		return fmt.Errorf("failed to generate certificates: %v", err)
 	}
-	if exists {
-		log.Println("Valid certificate already exists, reading CA from Secret")
-		caCert, err = certgen.ReadCaCertFromSecret(client, namespace, secretName)
-		if err != nil {
-			return fmt.Errorf("failed to read CA certificate from existing Secret: %v", err)
-		}
-	} else {
-		// 生成证书
-		hosts := []string{
-			serviceName,
-			fmt.Sprintf("%s.%s", serviceName, namespace),
-			fmt.Sprintf("%s.%s.svc", serviceName, namespace),
-			fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace),
-		}
 
-		log.Printf("Generating certificates with DNS names: %v", hosts)
-		var serverCert, serverKey []byte
-		caCert, serverCert, serverKey, err = certgen.GenerateCertificates(hosts)
-		if err != nil {
-			return fmt.Errorf("failed to generate certificates: %v", err)
-		}
-
-		// 创建或更新 Secret
-		if err := certgen.CreateOrUpdateSecret(client, namespace, secretName, caCert, serverCert, serverKey); err != nil {
-			return fmt.Errorf("failed to create/update secret: %v", err)
-		}
-		log.Printf("Secret %s/%s created/updated successfully", namespace, secretName)
+	// 创建或更新 Secret
+	if err := certgen.CreateOrUpdateSecret(client, namespace, secretName, caCert, serverCert, serverKey); err != nil {
+		return fmt.Errorf("failed to create/update secret: %v", err)
 	}
+	log.Printf("Secret %s/%s created/updated successfully", namespace, secretName)
 
 	// 创建或更新 MutatingWebhookConfiguration（无论证书是否存在，都要确保 Webhook 配置存在）
 	log.Printf("Creating/updating MutatingWebhookConfiguration: %s", webhookName)
