@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -96,7 +97,8 @@ func (r *BehaviorStubReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		"totalPods", totalPods,
 	)
 
-	return ctrl.Result{}, nil
+	// 每隔 5 秒自动重新 reconcile，确保能持续监听 Pod 变化
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 // isPodInjected 检查 Pod 是否已被注入 Sidecar
