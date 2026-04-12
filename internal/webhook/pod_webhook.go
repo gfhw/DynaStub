@@ -128,8 +128,9 @@ func (m *PodMutator) injectSidecar(pod *corev1.Pod, behaviorStub *dynastubv1.Beh
 	}
 
 	sidecarContainer := corev1.Container{
-		Name:  "dynastub-sidecar",
-		Image: sidecarImage,
+		Name:           "dynastub-sidecar",
+		Image:          sidecarImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "dynastub-shared",
