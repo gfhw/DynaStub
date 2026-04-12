@@ -1,0 +1,26 @@
+apiVersion: dynastub.example.com/v1
+kind: BehaviorStub
+metadata:
+  name: ls-behavior
+  namespace: default
+spec:
+  targetSelector:
+    matchLabels:
+      app: test-app
+  sidecarImage: dynastub-sidecar:latest
+  scriptVolume:
+    hostPath: /opt/dynastub/scripts
+    mountPath: /src/scripts
+  behaviors:
+  - name: replace-ls
+    targetPath: /bin/ls
+    scriptPath: ls  # 注意：这里直接是脚本文件名，没有路径
+    enableLogging: true
+    logPath: /var/log/dynastub/ls.log
+  sidecarResources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 32Mi

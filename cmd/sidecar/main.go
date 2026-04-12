@@ -28,23 +28,27 @@ const (
 )
 
 func main() {
+	log.Println("[Sidecar] ========================================")
+	log.Println("[Sidecar] Starting DynaStub Sidecar")
+	log.Println("[Sidecar] ========================================")
+
 	// 设置日志输出到文件（如果指定了日志路径）
 	logFile := getEnv("LOG_FILE", "/var/log/certgen/certgen.log")
 	if logFile != "" {
 		// 确保日志目录存在
 		logDir := filepath.Dir(logFile)
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			log.Printf("Warning: Failed to create log directory %s: %v", logDir, err)
+			log.Printf("[Sidecar] Warning: Failed to create log directory %s: %v", logDir, err)
 		} else {
 			// 打开日志文件
 			f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				log.Printf("Warning: Failed to open log file %s: %v", logFile, err)
+				log.Printf("[Sidecar] Warning: Failed to open log file %s: %v", logFile, err)
 			} else {
 				defer f.Close()
 				// 同时输出到文件和标准输出
 				log.SetOutput(io.MultiWriter(os.Stdout, f))
-				log.Printf("Logging to file: %s", logFile)
+				log.Printf("[Sidecar] Logging to file: %s", logFile)
 			}
 		}
 	}
@@ -67,32 +71,50 @@ func main() {
 	}
 
 	// 正常运行模式
-	log.Println("Starting DynaStub Sidecar...")
+	log.Println("[Sidecar] Running in normal sidecar mode")
 
 	// 获取配置
 	config := loadConfig()
-	log.Printf("Configuration: BehaviorStub=%s/%s, SharedDir=%s, ScriptMountPath=%s",
-		config.Namespace, config.BehaviorStubName, config.SharedDir, config.ScriptMountPath)
+	log.Printf("[Sidecar] Configuration loaded:")
+	log.Printf("[Sidecar]   - BehaviorStub: %s/%s", config.Namespace, config.BehaviorStubName)
+	log.Printf("[Sidecar]   - SharedDir: %s", config.SharedDir)
+	log.Printf("[Sidecar]   - ScriptMountPath: %s", config.ScriptMountPath)
 
-	// 创建 K8s 动态客户端
-	dynamicClient, err := createDynamicClient()
-	if err != nil {
-		log.Fatalf("Failed to create Kubernetes client: %v", err)
+	// 检查目录
+	log.Printf("[Sidecar] Checking directories...")
+	if _, err := os.Stat(config.ScriptMountPath); err != nil {
+		log.Printf("[Sidecar] WARNING: Script mount path %s does not exist or is not accessible: %v", config.ScriptMountPath, err)
+	} else {
+		log.Printf("[Sidecar] Script mount path %s is accessible", config.ScriptMountPath)
 	}
 
+	// 创建 K8s 动态客户端
+	log.Println("[Sidecar] Creating Kubernetes dynamic client...")
+	dynamicClient, err := createDynamicClient()
+	if err != nil {
+		log.Fatalf("[Sidecar] FATAL: Failed to create Kubernetes client: %v", err)
+	}
+	log.Println("[Sidecar] Kubernetes dynamic client created successfully")
+
 	// 创建 Sidecar 管理器
+	log.Println("[Sidecar] Creating Sidecar manager...")
 	sidecar := NewSidecarManager(config, dynamicClient)
 
 	// 首次同步所有脚本
+	log.Println("[Sidecar] Starting initial script sync...")
 	if err := sidecar.SyncAllScripts(); err != nil {
-		log.Fatalf("Failed to sync scripts: %v", err)
+		log.Fatalf("[Sidecar] FATAL: Failed to sync scripts: %v", err)
 	}
+	log.Println("[Sidecar] Initial script sync completed successfully")
 
 	// 标记 ready
+	log.Println("[Sidecar] Marking sidecar as ready...")
 	if err := markReady(); err != nil {
-		log.Fatalf("Failed to mark ready: %v", err)
+		log.Fatalf("[Sidecar] FATAL: Failed to mark ready: %v", err)
 	}
-	log.Println("Sidecar is ready")
+	log.Println("[Sidecar] ========================================")
+	log.Println("[Sidecar] Sidecar is READY")
+	log.Println("[Sidecar] ========================================")
 
 	// 启动监听
 	ctx, cancel := context.WithCancel(context.Background())
@@ -296,57 +318,102 @@ type BehaviorStub struct {
 
 // SyncAllScripts 同步所有脚本
 func (s *SidecarManager) SyncAllScripts() error {
+	log.Println("[Sidecar] ========================================")
+	log.Println("[Sidecar] Starting SyncAllScripts")
+	log.Println("[Sidecar] ========================================")
+
 	// 从 K8s API 获取 BehaviorStub
+	log.Println("[Sidecar] Fetching BehaviorStub from Kubernetes API...")
 	bs, err := s.getBehaviorStub()
 	if err != nil {
 		// 如果获取失败，尝试从环境变量或本地配置加载
-		log.Printf("Warning: Failed to get BehaviorStub from API: %v", err)
-		log.Println("Falling back to copy all scripts from source directory")
+		log.Printf("[Sidecar] WARNING: Failed to get BehaviorStub from API: %v", err)
+		log.Println("[Sidecar] Falling back to copy all scripts from source directory")
 		return s.syncAllFromDirectory()
 	}
 
+	log.Printf("[Sidecar] BehaviorStub fetched successfully")
+
 	// 保存 behaviors 列表
 	s.behaviors = bs.Spec.Behaviors
+	log.Printf("[Sidecar] Number of behaviors configured: %d", len(s.behaviors))
+	for i, behavior := range s.behaviors {
+		log.Printf("[Sidecar]   - Behavior %d: name=%s, targetPath=%s, scriptPath=%s",
+			i+1, behavior.Name, behavior.TargetPath, behavior.ScriptPath)
+	}
 
 	// 确保目标目录存在
+	log.Printf("[Sidecar] Ensuring shared directory exists: %s", s.config.SharedDir)
 	if err := os.MkdirAll(s.config.SharedDir, 0755); err != nil {
+		log.Printf("[Sidecar] ERROR: Failed to create shared directory: %v", err)
 		return fmt.Errorf("failed to create shared directory: %v", err)
 	}
+	log.Println("[Sidecar] Shared directory ready")
 
 	// 根据 behaviors 列表精确复制每个脚本
+	log.Println("[Sidecar] Starting to sync individual behavior scripts...")
+	successCount := 0
 	for _, behavior := range s.behaviors {
 		if err := s.syncBehaviorScript(behavior); err != nil {
-			log.Printf("Failed to sync script for behavior %s: %v", behavior.Name, err)
+			log.Printf("[Sidecar] ERROR: Failed to sync script for behavior %s: %v", behavior.Name, err)
 			continue
 		}
+		successCount++
 	}
+
+	log.Printf("[Sidecar] Script sync completed: %d/%d successful", successCount, len(s.behaviors))
+	log.Println("[Sidecar] ========================================")
+	log.Println("[Sidecar] SyncAllScripts completed")
+	log.Println("[Sidecar] ========================================")
 
 	return nil
 }
 
 // syncBehaviorScript 同步单个 behavior 的脚本
 func (s *SidecarManager) syncBehaviorScript(behavior Behavior) error {
+	log.Printf("[Sidecar] Syncing behavior: %s", behavior.Name)
+
 	// 源文件路径（在 hostPath 中）
 	srcPath := filepath.Join(s.config.ScriptMountPath, behavior.ScriptPath)
+	log.Printf("[Sidecar]   - Source script path: %s", srcPath)
 
-	// 目标文件名（使用 targetPath 的最后一部分，或自定义映射）
-	// 例如：/usr/bin/docker -> docker
-	targetName := filepath.Base(behavior.TargetPath)
-	dstPath := filepath.Join(s.config.SharedDir, targetName)
+	// 目标文件名：使用 targetPath 的最后一部分作为命令名
+	// 例如：/bin/ls -> ls（去掉任何扩展名，确保就是命令名）
+	targetCommand := filepath.Base(behavior.TargetPath)
+	// 去掉扩展名，确保文件名就是纯命令名
+	targetCommand = targetCommand[:len(targetCommand)-len(filepath.Ext(targetCommand))]
+	dstPath := filepath.Join(s.config.SharedDir, targetCommand)
 
-	log.Printf("Syncing behavior %s: %s -> %s", behavior.Name, srcPath, dstPath)
+	log.Printf("[Sidecar]   - Target command: %s", targetCommand)
+	log.Printf("[Sidecar]   - Destination path: %s", dstPath)
 
 	// 检查源文件是否存在
+	log.Printf("[Sidecar]   - Checking if source script exists...")
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		log.Printf("[Sidecar]   - ERROR: Source script not found: %s", srcPath)
 		return fmt.Errorf("source script not found: %s", srcPath)
 	}
+	log.Printf("[Sidecar]   - Source script found")
 
 	// 原子复制
+	log.Printf("[Sidecar]   - Starting atomic copy...")
 	if err := s.atomicCopy(srcPath, dstPath); err != nil {
+		log.Printf("[Sidecar]   - ERROR: Failed to copy script: %v", err)
 		return fmt.Errorf("failed to copy script: %v", err)
 	}
 
-	log.Printf("Successfully synced script for behavior %s: %s", behavior.Name, targetName)
+	log.Printf("[Sidecar] Successfully synced script for behavior %s: %s -> %s",
+		behavior.Name, srcPath, dstPath)
+
+	// 验证目标文件
+	log.Printf("[Sidecar]   - Verifying destination file...")
+	if info, err := os.Stat(dstPath); err != nil {
+		log.Printf("[Sidecar]   - WARNING: Failed to verify destination file: %v", err)
+	} else {
+		log.Printf("[Sidecar]   - Destination file verified: size=%d bytes, mode=%v",
+			info.Size(), info.Mode())
+	}
+
 	return nil
 }
 
@@ -387,45 +454,67 @@ func (s *SidecarManager) syncAllFromDirectory() error {
 
 // atomicCopy 原子复制文件
 func (s *SidecarManager) atomicCopy(srcPath, dstPath string) error {
+	log.Printf("[Sidecar] [atomicCopy] Starting atomic copy: %s -> %s", srcPath, dstPath)
+
 	// 打开源文件
+	log.Printf("[Sidecar] [atomicCopy] Opening source file...")
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
+		log.Printf("[Sidecar] [atomicCopy] ERROR: Failed to open source file: %v", err)
 		return fmt.Errorf("failed to open source file %s: %v", srcPath, err)
 	}
 	defer srcFile.Close()
+	log.Printf("[Sidecar] [atomicCopy] Source file opened successfully")
 
 	// 创建临时文件
 	tmpPath := dstPath + ".tmp"
+	log.Printf("[Sidecar] [atomicCopy] Creating temp file: %s", tmpPath)
 	dstFile, err := os.Create(tmpPath)
 	if err != nil {
+		log.Printf("[Sidecar] [atomicCopy] ERROR: Failed to create temp file: %v", err)
 		return fmt.Errorf("failed to create temp file: %v", err)
 	}
+	log.Printf("[Sidecar] [atomicCopy] Temp file created successfully")
 
 	// 复制内容
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
+	log.Printf("[Sidecar] [atomicCopy] Copying file content...")
+	bytesCopied, err := io.Copy(dstFile, srcFile)
+	if err != nil {
 		dstFile.Close()
 		os.Remove(tmpPath)
+		log.Printf("[Sidecar] [atomicCopy] ERROR: Failed to copy file content: %v", err)
 		return fmt.Errorf("failed to copy file content: %v", err)
 	}
+	log.Printf("[Sidecar] [atomicCopy] File content copied: %d bytes", bytesCopied)
 
 	// 关闭文件
+	log.Printf("[Sidecar] [atomicCopy] Closing temp file...")
 	if err := dstFile.Close(); err != nil {
 		os.Remove(tmpPath)
+		log.Printf("[Sidecar] [atomicCopy] ERROR: Failed to close temp file: %v", err)
 		return fmt.Errorf("failed to close temp file: %v", err)
 	}
+	log.Printf("[Sidecar] [atomicCopy] Temp file closed successfully")
 
 	// 设置执行权限
+	log.Printf("[Sidecar] [atomicCopy] Setting executable permission (0755)...")
 	if err := os.Chmod(tmpPath, 0755); err != nil {
 		os.Remove(tmpPath)
+		log.Printf("[Sidecar] [atomicCopy] ERROR: Failed to set executable permission: %v", err)
 		return fmt.Errorf("failed to set executable permission: %v", err)
 	}
+	log.Printf("[Sidecar] [atomicCopy] Executable permission set successfully")
 
 	// 原子重命名
+	log.Printf("[Sidecar] [atomicCopy] Performing atomic rename: %s -> %s", tmpPath, dstPath)
 	if err := os.Rename(tmpPath, dstPath); err != nil {
 		os.Remove(tmpPath)
+		log.Printf("[Sidecar] [atomicCopy] ERROR: Failed to rename file: %v", err)
 		return fmt.Errorf("failed to rename file: %v", err)
 	}
+	log.Printf("[Sidecar] [atomicCopy] Atomic rename completed successfully")
 
+	log.Printf("[Sidecar] [atomicCopy] Atomic copy finished successfully: %s -> %s", srcPath, dstPath)
 	return nil
 }
 
@@ -437,7 +526,7 @@ func (s *SidecarManager) WatchBehaviorStub(ctx context.Context) error {
 		Resource: "behaviorstubs",
 	}
 
-	log.Printf("Starting to watch BehaviorStub: %s/%s", s.config.Namespace, s.config.BehaviorStubName)
+	log.Printf("[Sidecar] Starting to watch BehaviorStub: %s/%s", s.config.Namespace, s.config.BehaviorStubName)
 
 	watchInterface, err := s.dynamicClient.Resource(gvr).
 		Namespace(s.config.Namespace).
@@ -446,30 +535,33 @@ func (s *SidecarManager) WatchBehaviorStub(ctx context.Context) error {
 			Namespace: s.config.Namespace,
 		}))
 	if err != nil {
+		log.Printf("[Sidecar] ERROR: Failed to watch BehaviorStub: %v", err)
 		return fmt.Errorf("failed to watch BehaviorStub: %v", err)
 	}
+	log.Println("[Sidecar] BehaviorStub watch started successfully")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping BehaviorStub watch...")
+			log.Println("[Sidecar] Context cancelled, stopping BehaviorStub watch...")
 			return nil
 		case event := <-watchInterface.ResultChan():
+			log.Printf("[Sidecar] Received BehaviorStub event: type=%s", event.Type)
 			switch event.Type {
 			case watch.Added, watch.Modified:
-				log.Printf("BehaviorStub %s detected, syncing scripts...", event.Type)
+				log.Printf("[Sidecar] BehaviorStub %s detected, syncing scripts...", event.Type)
 				if err := s.SyncAllScripts(); err != nil {
-					log.Printf("Failed to sync scripts after %s event: %v", event.Type, err)
+					log.Printf("[Sidecar] ERROR: Failed to sync scripts after %s event: %v", event.Type, err)
 				} else {
-					log.Println("Scripts synced successfully after BehaviorStub change")
+					log.Println("[Sidecar] Scripts synced successfully after BehaviorStub change")
 				}
 			case watch.Deleted:
-				log.Println("BehaviorStub deleted, cleaning up scripts...")
+				log.Println("[Sidecar] BehaviorStub deleted, cleaning up scripts...")
 				s.cleanupScripts()
 			case watch.Error:
-				log.Printf("Watch error occurred: %v", event.Object)
+				log.Printf("[Sidecar] ERROR: Watch error occurred: %v", event.Object)
 			default:
-				log.Printf("Unknown watch event type: %v", event.Type)
+				log.Printf("[Sidecar] WARNING: Unknown watch event type: %v", event.Type)
 			}
 		}
 	}
