@@ -17,6 +17,11 @@ spec:
     scriptPath: ls
     enableLogging: true
     logPath: /var/log/dynastub/ls.log
+  - name: replace-cat
+    targetPath: /bin/cat
+    scriptPath: cat
+    enableLogging: true
+    logPath: /var/log/dynastub/cat.log
   sidecarResources:
     limits:
       cpu: 200m

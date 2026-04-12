@@ -1,0 +1,45 @@
+#!/bin/sh
+# 示例 cat 脚本，用于测试 DynaStub
+
+# 找到原始 cat 命令
+ORIGINAL=$(which cat)
+
+# 输出日志
+LOG_FILE="/tmp/dynastub-cat.log"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] DynaStub: Intercepted cat command: $*" >> "$LOG_FILE"
+
+# 检查参数
+if [ $# -eq 0 ]; then
+    # 没有参数，读取标准输入
+    echo "DynaStub: cat reading from stdin..."
+    exec "$ORIGINAL"
+elif [ "$1" = "README.md" ]; then
+    # 模拟 README.md 文件内容
+    echo "# Test README.md"
+    echo ""
+    echo "This is a simulated README.md file created by DynaStub."
+    echo ""
+    echo "## Features"
+    echo "- Dynamic behavior injection"
+    echo "- Hot update support"
+    echo "- PATH hijacking scheme"
+    echo ""
+    echo "## Usage"
+    echo "kubectl apply -f behaviorstub-example.yaml"
+elif [ "$1" = "/etc/passwd" ]; then
+    # 模拟 /etc/passwd 文件内容
+    echo "root:x:0:0:root:/root:/bin/sh"
+    echo "nobody:x:65534:65534:nobody:/nonexistent:/bin/false"
+    echo "dynastub:x:1000:1000:DynaStub User:/home/dynastub:/bin/sh"
+else
+    # 检查文件是否存在
+    if [ -f "$1" ]; then
+        # 文件存在，调用原始 cat 命令
+        echo "DynaStub: Reading file $1..."
+        exec "$ORIGINAL" "$@"
+    else
+        # 文件不存在，模拟错误
+        echo "cat: $1: No such file or directory"
+        exit 1
+    fi
+fi
