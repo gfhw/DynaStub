@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -57,11 +58,11 @@ func GenerateCertificates(hosts []string) (caCert, serverCert, serverKey []byte,
 		Subject: pkix.Name{
 			Organization: []string{"DynaStub Operator"},
 		},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(100, 0, 0),
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		DNSNames:     hosts,
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().AddDate(100, 0, 0),
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		DNSNames:    hosts,
 	}
 
 	serverPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -79,8 +80,6 @@ func GenerateCertificates(hosts []string) (caCert, serverCert, serverKey []byte,
 
 	return caCert, serverCert, serverKey, nil
 }
-
-
 
 // CreateOrUpdateSecret creates or updates a secret with the certificates
 func CreateOrUpdateSecret(client kubernetes.Interface, namespace, secretName string, caCert, serverCert, serverKey []byte) error {
@@ -128,6 +127,25 @@ func CertExistsAndValid(client kubernetes.Interface, namespace, secretName strin
 	}
 
 	return true, nil
+}
+
+// ReadCaCertFromSecret reads CA certificate from existing Secret
+func ReadCaCertFromSecret(client kubernetes.Interface, namespace, secretName string) ([]byte, error) {
+	secret, err := client.CoreV1().Secrets(namespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	if secret.Data == nil {
+		return nil, fmt.Errorf("secret data is empty")
+	}
+
+	caCert, ok := secret.Data[caCertFile]
+	if !ok || len(caCert) == 0 {
+		return nil, fmt.Errorf("CA certificate not found in secret")
+	}
+
+	return caCert, nil
 }
 
 // CreateOrUpdateWebhookConfiguration creates or updates MutatingWebhookConfiguration
